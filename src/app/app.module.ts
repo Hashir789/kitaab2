@@ -1,11 +1,11 @@
 import { Module } from '@nestjs/common';
 import { AppService } from './app.service';
 import { AppController } from './app.controller';
-import { AuthModule } from 'src/auth/auth.module';
-import { LoggerModule } from 'src/logger/logger.module';
-import { RedisModule } from 'src/database/redis/redis.module';
+import { AuthModule } from '../auth/auth.module';
+import { LoggerModule } from '../logger/logger.module';
+import { RedisModule } from '../database/redis/redis.module';
 import { ConfigModule, ConfigModuleOptions } from '@nestjs/config';
-import { PostgresModule } from 'src/database/postgres/postgres.module';
+import { PostgresModule } from '../database/postgres/postgres.module';
 
 @Module({
   imports: [

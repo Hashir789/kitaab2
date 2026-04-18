@@ -1,7 +1,7 @@
 import { Redis } from '@upstash/redis';
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from 'src/logger/logger.service';
+import { Logger } from '../../logger/logger.service';
 
 @Injectable()
 export class RedisService {

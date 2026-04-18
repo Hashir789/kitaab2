@@ -10,7 +10,6 @@ async function bootstrap(): Promise<void> {
   const app: INestApplication = await NestFactory.create(AppModule, { logger: false });
   const logger: Logger = app.get<Logger>(Logger);
   app.useLogger(logger);
-  app.setGlobalPrefix('api');
   const configService: ConfigService = app.get<ConfigService>(ConfigService);
   if (configService.get<string>('TRUST_PROXY') === 'true') {
     app.getHttpAdapter().getInstance().set('trust proxy', 1);

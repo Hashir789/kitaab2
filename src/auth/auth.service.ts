@@ -5,8 +5,8 @@ import { JwtService } from '@nestjs/jwt';
 import * as nodemailer from 'nodemailer';
 import { SignupDto } from './dto/signup.dto';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from 'src/logger/logger.service';
-import { RedisService } from 'src/database/redis/redis.service';
+import { Logger } from '../logger/logger.service';
+import { RedisService } from '../database/redis/redis.service';
 import { Injectable, UnauthorizedException, BadRequestException, HttpException } from '@nestjs/common';
 
 @Injectable()

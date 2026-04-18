@@ -7,6 +7,15 @@ export class Logger implements LoggerService {
   private readonly logger: winston.Logger;
 
   constructor() {
+    const transports: winston.transport[] = [new winston.transports.Console()];
+    if (process.env.VERCEL !== '1') {
+      transports.push(
+        new winston.transports.File({
+          filename: 'logs/app.log',
+          options: { flags: 'w' },
+        }),
+      );
+    }
     this.logger = winston.createLogger({
       level: 'info',
       format: winston.format.combine(
@@ -15,13 +24,7 @@ export class Logger implements LoggerService {
           return `${timestamp} [${level.toUpperCase()}]: ${message}`;
         })
       ),
-      transports: [
-        new winston.transports.Console(),
-        new winston.transports.File({
-          filename: 'logs/app.log',
-          options: { flags: 'w' },
-        }),
-      ],
+      transports
     });
   }
 

@@ -1,6 +1,6 @@
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
-import { Logger } from 'src/logger/logger.service';
+import { Logger } from '../logger/logger.service';
 import { AuthenticatedRequest } from './auth.interface';
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
 
@@ -8,9 +8,9 @@ import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from
 export class JwtAuthGuard implements CanActivate {
 
   private readonly excludedUrls: string[] = [
-    '/api/health-check',
-    '/api/database/connection-check',
-    '/api/auth/signup'
+    '/health-check',
+    '/database/connection-check',
+    '/auth/signup'
   ];
   
   constructor(

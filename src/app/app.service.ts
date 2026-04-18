@@ -1,15 +1,15 @@
-import { Logger } from 'src/logger/logger.service';
-import { RedisService } from 'src/database/redis/redis.service';
-import { PostgresService } from 'src/database/postgres/postgres.service';
+import { Logger } from '../logger/logger.service';
 import { Injectable, HttpException } from '@nestjs/common';
+import { RedisService } from '../database/redis/redis.service';
+import { PostgresService } from '../database/postgres/postgres.service';
 
 @Injectable()
 export class AppService {
 
   constructor(
-    private readonly postgresService: PostgresService,
+    private readonly loggerService: Logger,
     private readonly redisService: RedisService,
-    private readonly loggerService: Logger
+    private readonly postgresService: PostgresService
   ) {}
   
   healthCheck() {

@@ -10,14 +10,9 @@ import { StringValue } from 'ms';
     JwtModule.registerAsync({
       inject: [ConfigService],
       useFactory: async (configService: ConfigService) => {
-        const privateKey = configService.get<string>('JWT_PRIVATE_KEY');
         const publicKey = configService.get<string>('JWT_PUBLIC_KEY');
-        const expiresIn =
-          (configService.get<string>('ACCESS_TOKEN_EXPIRATION_TIME') || '1h') as StringValue;
-
-        if (!privateKey || !publicKey) {
-          throw new Error('JWT keys are not defined');
-        }
+        const privateKey = configService.get<string>('JWT_PRIVATE_KEY');
+        const expiresIn = (configService.get<string>('ACCESS_TOKEN_EXPIRATION_TIME') || '1h') as StringValue;
 
         return {
           privateKey,
