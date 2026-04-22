@@ -3,8 +3,8 @@ import { Global, Module } from '@nestjs/common';
 
 @Global()
 @Module({
-  providers: [Logger],
   exports: [Logger],
+  providers: [Logger]
 })
 
 export class LoggerModule {}

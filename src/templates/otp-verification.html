@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Your one-time password — Kitaab</title>
+</head>
+<body style="margin:0;padding:0;background-color:#f8f9fa;">
+  
+  <div style="display:none;max-height:0;overflow:hidden;">Your Kitaab one-time password</div>
+
+  <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8f9fa;">
+    <tr>
+      <td align="center" style="padding:32px 16px;">
+        <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border-radius:12px;overflow:hidden;border:1px solid #e6e6e6;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,0.08);">
+          
+          <!-- Logo -->
+          <tr>
+            <td align="center" style="padding:24px 28px 0 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+              <a href="https://www.kitaab.me" style="text-decoration:none;">
+                <img src="https://www.kitaab.me/kitaab-logo.png" width="160" height="54" alt="Kitaab" border="0" style="display:block;width:160px;max-width:100%;height:auto;border:0;" />
+              </a>
+            </td>
+          </tr>
+
+          <!-- Content -->
+          <tr>
+            <td style="padding:16px 28px 8px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+              <p style="margin:0 0 6px 0;font-size:11px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#8c8c8c;">Verification</p>
+              <p style="margin:0;font-size:15px;line-height:1.6;color:#787878;">
+                Hi {{name}}, use this one-time password to verify it’s you. It expires in {{expiresInMinutes}} minutes.
+              </p>
+            </td>
+          </tr>
+
+          <!-- OTP Box -->
+          <tr>
+            <td style="padding:8px 28px 24px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px;background-color:#fafafa;border:1px solid #e6e6e6;">
+                <tr>
+                  <td align="center" style="padding:22px 16px 16px 16px;">
+                    <p style="margin:0 0 10px 0;font-size:12px;font-weight:600;color:#828282;">Your one-time password</p>
+                    
+                    <div style="display:inline-block;">
+                      <!-- Hidden input for copying -->
+                      <input id="otpInput" type="text" value="{{otp}}" 
+                             style="position:absolute; left:-9999px; opacity:0; width:1px; height:1px;" readonly>
+
+                      <table role="presentation" cellpadding="0" cellspacing="0" border="0" align="center" style="margin:0 auto;">
+                        <tr>
+                          <td style="padding:6px 18px;border-radius:8px;border:1px solid #e6e6e6;background-color:#ffffff;">
+                            <p id="otpText" style="margin:0;font-size:24px;font-weight:700;line-height:1.2;letter-spacing:0.28em;color:#5a5a5a;font-family:ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,monospace;">
+                              123456
+                            </p>
+                          </td>
+                          
+                          <!-- Copy Button -->
+                          <td valign="middle" style="padding-left:8px;">
+                            <button onclick="copyOTP()" 
+                                    style="background:#646464;color:#f0f0f0;border:none;border-radius:6px;padding:10px 12px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;">
+                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0f0f0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+                                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
+                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      </table>
+                    </div>
+                  </td>
+                </tr>
+                
+                <tr>
+                  <td style="padding:0 16px 18px 16px;">
+                    <p style="margin:0;font-size:13px;line-height:1.6;text-align:center;color:#a0a0a0;">
+                      For your security, do not share this one-time password with anyone.
+                    </p>
+                  </td>
+                </tr>
+              </table>
+
+              <p style="margin:18px 0 0 0;font-size:12px;line-height:1.5;color:#a0a0a0;">
+                If you did not try to sign in, you can ignore this email or contact us at 
+                <a href="mailto:support.kitaab@gmail.com" style="color:#787878;text-decoration:underline;">support.kitaab@gmail.com</a>.
+              </p>
+            </td>
+          </tr>
+
+          <!-- Footer -->
+          <tr>
+            <td style="padding:0 28px 28px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+              <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%">
+                <tr>
+                  <td align="center" style="padding-top:4px;">
+                    <a href="https://www.kitaab.me" 
+                       style="display:inline-block;padding:10px 22px;font-size:14px;font-weight:600;text-decoration:none;border-radius:5px;color:#f0f0f0;background-color:#646464;">
+                      Visit Kitaab
+                    </a>
+                  </td>
+                </tr>
+              </table>
+              <p style="margin:20px 0 0 0;font-size:12px;line-height:1.5;text-align:center;color:#a0a0a0;">
+                Kitaab — Islamic deed tracker<br>
+                <a href="mailto:support.kitaab@gmail.com" style="color:#787878;text-decoration:none;">support.kitaab@gmail.com</a>
+              </p>
+            </td>
+          </tr>
+        </table>
+      </td>
+    </tr>
+  </table>
+
+  <!-- Copy Script -->
+  <script type="text/javascript">
+    function copyOTP() {
+      const otpInput = document.getElementById('otpInput');
+      otpInput.select();
+      otpInput.setSelectionRange(0, 99999); // For mobile devices
+      
+      try {
+        document.execCommand('copy');
+        
+        // Optional: Show feedback (works in many clients)
+        const btn = event.currentTarget;
+        const originalText = btn.innerHTML;
+        btn.innerHTML = `
+          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0f0f0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+            <polyline points="20 6 9 17 4 12"></polyline>
+          </svg>
+        `;
+        setTimeout(() => {
+          btn.innerHTML = originalText;
+        }, 2000);
+      } catch (err) {
+        alert("Failed to copy. Please select and copy manually.");
+      }
+    }
+  </script>
+
+</body>
+</html>

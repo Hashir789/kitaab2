@@ -13,12 +13,12 @@ import { PostgresModule } from '../database/postgres/postgres.module';
       isGlobal: true,
     } as ConfigModuleOptions),
     AuthModule,
+    RedisModule,
     LoggerModule,
-    PostgresModule,
-    RedisModule
+    PostgresModule
   ],
-  controllers: [AppController],
-  providers: [AppService]
+  providers: [AppService],
+  controllers: [AppController]
 })
 
 export class AppModule {}

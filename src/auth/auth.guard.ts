@@ -2,21 +2,22 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
 import { AuthenticatedRequest } from './auth.interface';
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, HttpException } from '@nestjs/common';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
 
   private readonly excludedUrls: string[] = [
+    '/auth/signup',
     '/health-check',
-    '/database/connection-check',
-    '/auth/signup'
+    '/visitors/track',
+    '/database/connection-check'
   ];
   
   constructor(
+    private readonly loggerService: Logger,
     private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
-    private readonly loggerService: Logger
+    private readonly configService: ConfigService
   ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
@@ -40,7 +41,8 @@ export class JwtAuthGuard implements CanActivate {
       request.user = payload;
       return true;
     } catch (error) {
-      throw new UnauthorizedException('Invalid or expired token');
+      this.loggerService.error(error.message, error.status ?? 500);
+      throw new HttpException(error.message, error.status ?? 500);
     }
   }  
 }

@@ -1,9 +1,9 @@
+import { StringValue } from 'ms';
 import { JwtModule } from '@nestjs/jwt';
 import { Module } from '@nestjs/common';
 import { AuthService } from './auth.service';
 import { ConfigService } from '@nestjs/config';
 import { AuthController } from './auth.controller';
-import { StringValue } from 'ms';
 
 @Module({
   imports: [
@@ -25,8 +25,8 @@ import { StringValue } from 'ms';
       },
     }),
   ],
-  controllers: [AuthController],
   providers: [AuthService],
+  controllers: [AuthController]
 })
 
 export class AuthModule {}

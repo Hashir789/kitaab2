@@ -3,8 +3,8 @@ import { Global, Module } from '@nestjs/common';
 
 @Global()
 @Module({
-  providers: [RedisService],
-  exports: [RedisService]
+  exports: [RedisService],
+  providers: [RedisService]
 })
 
 export class RedisModule {}

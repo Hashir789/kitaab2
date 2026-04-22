@@ -6,8 +6,7 @@ import * as nodemailer from 'nodemailer';
 import { SignupDto } from './dto/signup.dto';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
-import { RedisService } from '../database/redis/redis.service';
-import { Injectable, UnauthorizedException, BadRequestException, HttpException } from '@nestjs/common';
+import { Injectable, UnauthorizedException, BadRequestException } from '@nestjs/common';
 
 @Injectable()
 export class AuthService {
@@ -15,10 +14,9 @@ export class AuthService {
   private readonly transporter: nodemailer.Transporter;
 
   constructor(
-    private readonly jwtService: JwtService,
-    private readonly configService: ConfigService,
     private readonly loggerService: Logger,
-    private readonly redisService: RedisService
+    private readonly jwtService: JwtService,
+    private readonly configService: ConfigService
   ) {
     this.transporter = nodemailer.createTransport({
       service: 'gmail',

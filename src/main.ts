@@ -22,7 +22,7 @@ async function bootstrap(): Promise<void> {
       transform: true
     }),
   );
-  app.useGlobalGuards( new JwtAuthGuard(app.get(JwtService), app.get(ConfigService), logger) );
+  app.useGlobalGuards( new JwtAuthGuard(logger, app.get(JwtService), app.get(ConfigService)) );
   app.enableCors({
     origin: '*',
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],

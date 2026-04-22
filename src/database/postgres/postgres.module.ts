@@ -3,8 +3,8 @@ import { PostgresService } from './postgres.service';
 
 @Global()
 @Module({
-  providers: [PostgresService],
   exports: [PostgresService],
+  providers: [PostgresService]
 })
 
 export class PostgresModule {}

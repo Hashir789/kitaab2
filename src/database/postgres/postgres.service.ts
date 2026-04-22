@@ -8,16 +8,16 @@ export class PostgresService implements OnModuleDestroy {
   private pool: Pool;
 
   constructor(
-    private readonly configService: ConfigService,
-    private readonly loggerService: Logger
+    private readonly loggerService: Logger,
+    private readonly configService: ConfigService
   ) {
     this.pool = new Pool({
       user: this.configService.get<string>('POSTGRES_USER'),
       host: this.configService.get<string>('POSTGRES_HOST'),
+      port: this.configService.get<number>('POSTGRES_PORT'),
+      max: this.configService.get<number>('POSTGRES_POOL_MAX'),
       database: this.configService.get<string>('POSTGRES_NAME'),
-      password: this.configService.get<string>('POSTGRES_PASSWORD'),
-      port: this.configService.get<number>('POSTGRES_PORT') ?? 5432,
-      max: 10
+      password: this.configService.get<string>('POSTGRES_PASSWORD')
     });
   }
 

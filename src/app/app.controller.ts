@@ -1,5 +1,6 @@
 import { AppService } from './app.service';
-import { Controller, Get, HttpCode, HttpStatus } from '@nestjs/common';
+import { TrackVisitorsPayloadDto } from './dto/TrackVisitors.dto';
+import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post } from '@nestjs/common';
 
 @Controller()
 export class AppController {
@@ -16,5 +17,11 @@ export class AppController {
   @HttpCode(HttpStatus.OK)
   databaseConnectionCheck() {
     return this.appService.checkDatabaseConnections();
+  }
+
+  @Post('/visitors/track')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  trackVisitor(@Body() body: TrackVisitorsPayloadDto, @Ip() ip: string) {
+    return this.appService.trackVisitor(body, ip);
   }
 }
