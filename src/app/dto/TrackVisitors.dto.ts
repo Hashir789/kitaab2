@@ -1,6 +1,6 @@
 import { IsIn, IsNotEmpty, IsString } from 'class-validator';
 
-export class TrackVisitorsPayloadDto {
+export class TrackVisitorsDto {
   @IsString()
   @IsNotEmpty()
   timezone: string;

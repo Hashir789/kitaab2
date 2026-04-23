@@ -1,6 +1,7 @@
 import { Logger } from '../logger/logger.service';
+import { TrackVisitorsDto } from './dto/TrackVisitors.dto';
+import { VisitorMessagesDto } from './dto/VisitorMessages.dto';
 import { RedisService } from '../database/redis/redis.service';
-import { TrackVisitorsPayloadDto } from './dto/TrackVisitors.dto';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { TrackVisitorsQueryInterface } from './interface/TrackVisitors.interface';
@@ -39,7 +40,7 @@ export class AppService {
     }
   }
 
-  async trackVisitor(payload: TrackVisitorsPayloadDto, ip: string): Promise<void> {
+  async trackVisitor(payload: TrackVisitorsDto, ip: string): Promise<void> {
     try {
       const { timezone, anonymous_id, device_type } = payload;
       const clientIp = this.normalizeClientIp(ip);
@@ -56,7 +57,23 @@ export class AppService {
           device_type = EXCLUDED.device_type,
           number_of_visits = visitors.number_of_visits + 1,
           last_visited = NOW()
-        `, [anonymous_id, clientIp, city, country, timezone, device_type],
+        `, [anonymous_id, clientIp, city, country, timezone, device_type]
+      );
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? 500);
+      throw new HttpException('Failed to record visitor', HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async visitorMessages(payload: VisitorMessagesDto): Promise<void> {
+    try {
+      const { anonymous_id, name, email, phone, message } = payload;
+      await this.postgresService.query<TrackVisitorsQueryInterface>(`
+        INSERT INTO visitor_messages (visitor_id, name, email, phone, message)
+        SELECT v.id, $1, $2, $3, $4
+        FROM visitors v
+        WHERE v.anonymous_id = $5;
+        `, [name, email, phone, message, anonymous_id]
       );
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);

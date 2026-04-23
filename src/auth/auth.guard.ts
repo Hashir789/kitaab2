@@ -11,6 +11,7 @@ export class JwtAuthGuard implements CanActivate {
     '/auth/signup',
     '/health-check',
     '/visitors/track',
+    '/visitors/message',
     '/database/connection-check'
   ];
   

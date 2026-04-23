@@ -1,5 +1,6 @@
 import { AppService } from './app.service';
-import { TrackVisitorsPayloadDto } from './dto/TrackVisitors.dto';
+import { TrackVisitorsDto } from './dto/TrackVisitors.dto';
+import { VisitorMessagesDto } from './dto/VisitorMessages.dto';
 import { Body, Controller, Get, HttpCode, HttpStatus, Ip, Post } from '@nestjs/common';
 
 @Controller()
@@ -21,7 +22,13 @@ export class AppController {
 
   @Post('/visitors/track')
   @HttpCode(HttpStatus.NO_CONTENT)
-  trackVisitor(@Body() body: TrackVisitorsPayloadDto, @Ip() ip: string) {
+  trackVisitor(@Body() body: TrackVisitorsDto, @Ip() ip: string) {
     return this.appService.trackVisitor(body, ip);
+  }
+
+  @Post('/visitors/message')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  visitorMessages(@Body() body: VisitorMessagesDto) {
+    return this.appService.visitorMessages(body);
   }
 }
