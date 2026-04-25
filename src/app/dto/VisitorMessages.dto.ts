@@ -18,7 +18,7 @@ export class VisitorMessagesDto {
 
   @IsString()
   @IsOptional()
-  @IsPhoneNumber('PK')
+  @IsPhoneNumber()
   phone: string;
 
   @IsString()
