@@ -1,7 +1,8 @@
-export interface TrackVisitorsQueryInterface  {
+export interface TrackVisitorsQueryInterface {
   id: string;
   ip: string;
   created_at: Date;
+  timezone: string;
   last_visited: Date;
   city: string | null;
   device_type: string;

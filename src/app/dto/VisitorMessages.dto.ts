@@ -13,6 +13,10 @@ export class VisitorMessagesDto {
   email: string;
 
   @IsString()
+  @IsNotEmpty()
+  subject: string;
+
+  @IsString()
   @IsOptional()
   @IsPhoneNumber('PK')
   phone: string;
