@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsPhoneNumber, IsString, MinLength } from 'class-validator';
+import { IsEmail, IsNotEmpty, IsOptional, IsString, MinLength } from 'class-validator';
 
 export class VisitorMessagesDto {
   @IsString()
@@ -18,7 +18,6 @@ export class VisitorMessagesDto {
 
   @IsString()
   @IsOptional()
-  @IsPhoneNumber()
   phone: string;
 
   @IsString()

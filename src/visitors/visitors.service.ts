@@ -91,21 +91,20 @@ export class VisitorService {
       this.loggerService.log('visitorEmails {controller}');
       const { anonymous_id, email } = payload;
       const rows = await this.postgresService.query<VisitorEmailsQueryInterface>(`
-        WITH inserted AS (
-          INSERT INTO visitor_emails (visitor_id, email)
-          SELECT v.id, $1
-          FROM visitors v 
-          WHERE v.anonymous_id = $2
-          RETURNING *
-        )
-        SELECT i.*, v.timezone
-        FROM inserted i
-        JOIN visitors v ON v.id = i.visitor_id;
+        INSERT INTO visitor_emails (visitor_id, email)
+        SELECT v.id, $1
+        FROM visitors v
+        WHERE v.anonymous_id = $2
+        ON CONFLICT (email)
+        DO UPDATE SET
+          visitor_id = EXCLUDED.visitor_id
+        RETURNING *;
       `, [email, anonymous_id]);
       if (!rows?.length) {
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
-      await this.sendVisitorEmailCopy({ email, timezone: rows[0].timezone });
+      const { timezone, created_at } = rows[0];
+      await this.sendVisitorEmailCopy({ email, timezone, created_at });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
       throw new HttpException(error.message, error.status ?? 500);
@@ -167,22 +166,21 @@ export class VisitorService {
 
   private async sendVisitorEmailCopy (body: SendVisitorEmailCopyBody): Promise<void> {
     this.loggerService.log('sendVisitorEmailCopy {helper}');
-    const { email, timezone } = body;
+    const { email, timezone, created_at } = body;
     const templatePath = join(process.cwd(), 'src', 'templates', 'waitlist-email.html');
     const template = await readFile(templatePath, 'utf-8');
-    const now = new Date();
     const date = new Intl.DateTimeFormat('en-GB', {
       timeZone: timezone,
       day: '2-digit',
       month: '2-digit',
       year: 'numeric'
-    }).format(now);
+    }).format(created_at);
     const time = new Intl.DateTimeFormat('en-US', {
       timeZone: timezone,
       hour: '2-digit',
       minute: '2-digit',
       hour12: true
-    }).format(now);
+    }).format(created_at);
     const html = template
       .replaceAll('{{date}}', date)
       .replaceAll('{{time}}', time)

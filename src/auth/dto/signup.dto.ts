@@ -1,9 +1,13 @@
-import { IsDateString, IsEmail, IsNotEmpty, IsString, MinLength } from 'class-validator';
+import { IsDateString, IsEmail, IsNotEmpty, IsString, MinLength, IsIn } from 'class-validator';
 
 export class SignupDto {
   @IsNotEmpty()
   @IsString()
-  fullName: string;
+  anonymous_id: string;
+
+  @IsNotEmpty()
+  @IsString()
+  full_name: string;
 
   @IsEmail()
   email: string;
@@ -14,8 +18,9 @@ export class SignupDto {
 
   @IsNotEmpty()
   @IsString()
+  @IsIn(['male', 'female', 'prefer_not_to_say'])
   gender: string;
 
   @IsDateString()
-  birthday: string;
+  dob: string;
 }

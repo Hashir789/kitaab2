@@ -46,5 +46,5 @@ export class JwtAuthGuard implements CanActivate {
       this.loggerService.error(error.message, error.status ?? 500);
       throw new HttpException(error.message, error.status ?? 500);
     }
-  }  
+  }
 }
