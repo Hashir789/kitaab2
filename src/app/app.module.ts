@@ -6,6 +6,7 @@ import { LoggerModule } from '../logger/logger.module';
 import { RedisModule } from '../database/redis/redis.module';
 import { ConfigModule, ConfigModuleOptions } from '@nestjs/config';
 import { PostgresModule } from '../database/postgres/postgres.module';
+import { VisitorsModule } from '../visitors/visitors.module';
 
 @Module({
   imports: [
@@ -15,7 +16,8 @@ import { PostgresModule } from '../database/postgres/postgres.module';
     AuthModule,
     RedisModule,
     LoggerModule,
-    PostgresModule
+    PostgresModule,
+    VisitorsModule
   ],
   providers: [AppService],
   controllers: [AppController]
