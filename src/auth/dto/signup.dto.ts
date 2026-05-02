@@ -1,12 +1,12 @@
 import { IsDateString, IsEmail, IsNotEmpty, IsString, MinLength, IsIn } from 'class-validator';
 
 export class SignupDto {
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   anonymous_id: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   full_name: string;
 
   @IsEmail()
@@ -16,8 +16,8 @@ export class SignupDto {
   @MinLength(8)
   password: string;
 
-  @IsNotEmpty()
   @IsString()
+  @IsNotEmpty()
   @IsIn(['male', 'female', 'prefer_not_to_say'])
   gender: string;
 

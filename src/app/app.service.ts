@@ -13,7 +13,7 @@ export class AppService {
     private readonly postgresService: PostgresService
   ) {}
   
-  // controller functions
+  // Controller functions
 
   healthCheck() {
     try {
@@ -24,16 +24,13 @@ export class AppService {
     }
   }
   
-  async checkDatabaseConnections(): Promise<{ data: CheckDatabaseConnectionsResponseInterface, statusCode: 200}> {
+  async checkDatabaseConnections(): Promise<CheckDatabaseConnectionsResponseInterface> {
     try {
       this.loggerService.log('checkDatabaseConnections {controller}');
       const [postgres, redis] = await Promise.allSettled([ this.tryPostgres(), this.tryRedis() ]);
       return {
-        data: {
-          redis: redis.status === 'fulfilled',
-          postgres: postgres.status === 'fulfilled',
-        },
-        statusCode: 200
+        redis: redis.status === 'fulfilled',
+        postgres: postgres.status === 'fulfilled'
       };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
@@ -41,7 +38,7 @@ export class AppService {
     }
   }
 
-  // helper functions
+  // Helper functions
   
   private async tryPostgres(): Promise<void> {
     this.loggerService.log('tryPostgres {helper}');

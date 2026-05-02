@@ -5,7 +5,7 @@ export class VisitorEmailsDto {
   @IsNotEmpty()
   anonymous_id: string;
 
-  @IsString()
   @IsEmail()
+  @IsString()
   email: string;
 }

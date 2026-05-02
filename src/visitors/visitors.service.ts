@@ -1,37 +1,22 @@
-import { join } from 'path';
-import { readFile } from 'fs/promises';
-import * as nodemailer from 'nodemailer';
-import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
+import { EmailService } from '../email/email.service';
 import { TrackVisitorsDto } from './dto/TrackVisitors.dto';
 import { VisitorEmailsDto } from './dto/VisitorEmails.dto';
 import { VisitorMessagesDto } from './dto/VisitorMessages.dto';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { VisitorEmailsQueryInterface } from './interface/VisitorEmails.interface';
-import { SendVisitorEmailCopyBody } from './interface/SendVisitorEmailCopy.interface';
 import { VisitorMessagesQueryInterface } from './interface/VisitorMessages.interface';
 import { LookupGeoForIpBody, LookupGeoForIpResult } from './interface/LookupGeoForIp.interface';
-import { SendVisitorMessageCopyEmailBody } from './interface/SendVisitorMessageCopyEmail.interface';
 
 @Injectable()
 export class VisitorService {
 
-  private readonly transporter: nodemailer.Transporter;
-  
   constructor(
     private readonly loggerService: Logger,
-    private readonly configService: ConfigService,
+    private readonly emailService: EmailService,
     private readonly postgresService: PostgresService
-  ) {
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: this.configService.get<string>('EMAIL_USER'),
-        pass: this.configService.get<string>('EMAIL_PASS'),
-      }
-    });
-  }
+  ) {}
   
   // controller functions
 
@@ -79,7 +64,7 @@ export class VisitorService {
       if (!rows?.length) {
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
-      await this.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone });
+      await this.emailService.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
       throw new HttpException(error.message, error.status ?? 500);
@@ -104,7 +89,7 @@ export class VisitorService {
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
       const { timezone, created_at } = rows[0];
-      await this.sendVisitorEmailCopy({ email, timezone, created_at });
+      await this.emailService.sendVisitorEmailCopy({ email, timezone, created_at });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
       throw new HttpException(error.message, error.status ?? 500);
@@ -127,70 +112,5 @@ export class VisitorService {
   private normalizeClientIp(ip: string): string {
     this.loggerService.log('normalizeClientIp {helper}');
     return ip === '::1' ? '127.0.0.1' : ip.replace(/^::ffff:/i, '');
-  }
-
-  private async sendVisitorMessageCopyEmail(body: SendVisitorMessageCopyEmailBody): Promise<void> {
-    this.loggerService.log('sendVisitorMessageCopyEmail {helper}');
-    const { name, email, phone, subject, message, timezone } = body;
-    const templatePath = join(process.cwd(), 'src', 'templates', 'contact-form-copy.html');
-    const template = await readFile(templatePath, 'utf-8');
-    const now = new Date();
-    const date = new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(now);
-    const time = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    }).format(now);
-    const html = template
-      .replaceAll('{{name}}', name)
-      .replaceAll('{{date}}', date)
-      .replaceAll('{{time}}', time)
-      .replaceAll('{{email}}', email)
-      .replaceAll('{{subject}}', subject)
-      .replaceAll('{{message}}', message)
-      .replaceAll('{{timezone}}', timezone)
-      .replaceAll('{{phone}}', phone || '---');
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: body.email,
-      subject: 'Copy of your message - Kitaab',
-      html
-    });
-  }
-
-  private async sendVisitorEmailCopy (body: SendVisitorEmailCopyBody): Promise<void> {
-    this.loggerService.log('sendVisitorEmailCopy {helper}');
-    const { email, timezone, created_at } = body;
-    const templatePath = join(process.cwd(), 'src', 'templates', 'waitlist-email.html');
-    const template = await readFile(templatePath, 'utf-8');
-    const date = new Intl.DateTimeFormat('en-GB', {
-      timeZone: timezone,
-      day: '2-digit',
-      month: '2-digit',
-      year: 'numeric'
-    }).format(created_at);
-    const time = new Intl.DateTimeFormat('en-US', {
-      timeZone: timezone,
-      hour: '2-digit',
-      minute: '2-digit',
-      hour12: true
-    }).format(created_at);
-    const html = template
-      .replaceAll('{{date}}', date)
-      .replaceAll('{{time}}', time)
-      .replaceAll('{{email}}', email)
-      .replaceAll('{{timezone}}', timezone);
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: body.email,
-      subject: 'We’ve received your message - Kitaab',
-      html
-    });
   }
 }

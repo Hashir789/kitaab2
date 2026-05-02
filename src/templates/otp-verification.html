@@ -50,19 +50,8 @@
                         <tr>
                           <td style="padding:6px 18px;border-radius:8px;border:1px solid #e6e6e6;background-color:#ffffff;">
                             <p id="otpText" style="margin:0;font-size:24px;font-weight:700;line-height:1.2;letter-spacing:0.28em;color:#5a5a5a;font-family:ui-monospace,'Cascadia Mono','Segoe UI Mono',Menlo,Consolas,monospace;">
-                              123456
+                              {{otp}}
                             </p>
-                          </td>
-                          
-                          <!-- Copy Button -->
-                          <td valign="middle" style="padding-left:8px;">
-                            <button onclick="copyOTP()" 
-                                    style="background:#646464;color:#f0f0f0;border:none;border-radius:6px;padding:10px 12px;cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;min-width:44px;min-height:44px;">
-                              <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0f0f0" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
-                                <rect x="9" y="9" width="13" height="13" rx="2"></rect>
-                                <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                              </svg>
-                            </button>
                           </td>
                         </tr>
                       </table>
@@ -109,33 +98,5 @@
       </td>
     </tr>
   </table>
-
-  <!-- Copy Script -->
-  <script type="text/javascript">
-    function copyOTP() {
-      const otpInput = document.getElementById('otpInput');
-      otpInput.select();
-      otpInput.setSelectionRange(0, 99999); // For mobile devices
-      
-      try {
-        document.execCommand('copy');
-        
-        // Optional: Show feedback (works in many clients)
-        const btn = event.currentTarget;
-        const originalText = btn.innerHTML;
-        btn.innerHTML = `
-          <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#f0f0f0" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
-            <polyline points="20 6 9 17 4 12"></polyline>
-          </svg>
-        `;
-        setTimeout(() => {
-          btn.innerHTML = originalText;
-        }, 2000);
-      } catch (err) {
-        alert("Failed to copy. Please select and copy manually.");
-      }
-    }
-  </script>
-
 </body>
 </html>

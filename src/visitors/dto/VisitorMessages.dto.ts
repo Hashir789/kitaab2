@@ -8,8 +8,8 @@ export class VisitorMessagesDto {
   @IsString()
   name: string;
 
-  @IsString()
   @IsEmail()
+  @IsString()
   email: string;
 
   @IsString()
