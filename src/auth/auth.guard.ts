@@ -1,7 +1,7 @@
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
-import { AuthenticatedRequest } from './auth.interface';
+import { AuthenticatedRequest, JwtAuthUser } from './auth.interface';
 import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, HttpException } from '@nestjs/common';
 
 @Injectable()
@@ -39,10 +39,10 @@ export class JwtAuthGuard implements CanActivate {
     const token: string = authHeader.split(' ')[1];
     try {
       const publicKey: string = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
-      const payload: { id: number, name: string, email: string, two_fa: boolean, join_date: Date } = await this.jwtService.verifyAsync(token, {
+      const payload = (await this.jwtService.verifyAsync(token, {
         publicKey,
         algorithms: ['RS256'],
-      });
+      })) as JwtAuthUser;
       request.user = payload;
       return true;
     } catch (error) {

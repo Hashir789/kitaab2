@@ -7,6 +7,7 @@ import { SignupDto } from './dto/signup.dto';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
 import { OtpVerifyDto } from './dto/otpVerify.dto';
+import { update2faDto } from './dto/update2fa.dto';
 import { EmailService } from '../email/email.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
@@ -15,6 +16,8 @@ import { signupQueryInterface, signupResult } from './interface/signup.interface
 import { otpVerifyQueryInterface, otpVerifyResult } from './interface/otpVerify.interface';
 import { EmailVerifyQueryInterface, EmailVerifyResult } from './interface/emailVerify.interface';
 import { verifyOtpResult } from './interface/verifyOtp.interface';
+import { AuthenticatedRequest } from './auth.interface';
+import { Update2FaGetQueryInterface, Update2FaPatchQueryInterface } from './interface/update2fa.interface';
 
 @Injectable()
 export class AuthService {
@@ -47,6 +50,7 @@ export class AuthService {
       `, [mail, passwordHash, fullName, sex, dateOfBirth, secret, anonymous_id]);
 
       if (!rows?.length) {
+        this.loggerService.error('Visitor not found', HttpStatus.NOT_FOUND);
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
 
@@ -84,6 +88,7 @@ export class AuthService {
       const { id, email: userEmail, password_hash, dob, email, gender, full_name, created_at, two_factor_enabled } = rows[0];
       const hashPassword = await compare(password + pepper, password_hash)
       if (!rows.length || !hashPassword) {
+        this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
       await this.postgresService.query(`
@@ -111,24 +116,25 @@ export class AuthService {
 
   async otpVerify(payload: OtpVerifyDto): Promise<otpVerifyResult> {
     try {
-      this.loggerService.log('verifyOtp {controller}');
+      this.loggerService.log('otpVerify {controller}');
       const { email: mail, otp } = payload;
       const rows = await this.postgresService.query<otpVerifyQueryInterface>(`
         SELECT secret, email_verified FROM users WHERE email = $1
       `, [mail]);
       if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
       const { secret, email_verified } = rows[0];
-      if (email_verified) {
-        return { verified: true };
-      }
       if (!this.verifyOtp({ secret, otp })) {
+        this.loggerService.error('Invalid or expired code', HttpStatus.BAD_REQUEST);
         throw new HttpException('Invalid or expired code', HttpStatus.BAD_REQUEST);
       }
-      await this.postgresService.query(`
-        UPDATE users SET email_verified = TRUE WHERE email = $1
-      `, [mail]);
+      if (!email_verified) {
+        await this.postgresService.query(`
+          UPDATE users SET email_verified = TRUE WHERE email = $1
+        `, [mail]);
+      }
       return { verified: true };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
@@ -147,6 +153,42 @@ export class AuthService {
       }
       return { verified: rows[0].email_verified };  
     } catch(error) {
+      this.loggerService.error(error.message, error.status ?? 500);
+      throw new HttpException(error.message, error.status ?? 500);
+    }
+  }
+
+  async update2fa(body: update2faDto, req: AuthenticatedRequest): Promise<void> {
+    try {
+      this.loggerService.log('update2fa {controller}');
+      const { sub: user_id, email, type: token_type } = req.user;
+      const { two_factor_enabled } = body;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      const rows = await this.postgresService.query<Update2FaGetQueryInterface>(`
+        SELECT email_verified FROM users WHERE id = $1 AND email = $2
+      `, [user_id, email]);
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const { email_verified } = rows[0];
+      if (email_verified) {
+        const updated = await this.postgresService.query<Update2FaPatchQueryInterface>(`
+          UPDATE users SET two_factor_enabled = $1 WHERE id = $2 AND email = $3
+          RETURNING two_factor_enabled
+        `, [two_factor_enabled, user_id, email]);
+        if (!updated?.length) {
+          this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+          throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        }
+      } else {
+        this.loggerService.error('Email not verified', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Email not verified', HttpStatus.BAD_REQUEST);
+      }
+    } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
       throw new HttpException(error.message, error.status ?? 500);
     }

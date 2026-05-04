@@ -2,11 +2,13 @@ import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
 import { SignupDto } from './dto/signup.dto';
 import { OtpVerifyDto } from './dto/otpVerify.dto';
+import { update2faDto } from './dto/update2fa.dto';
 import { signupResult } from './interface/signup.interface';
 import { EmailVerifyQueryDto } from './dto/emailVerify.dto';
+import type { AuthenticatedRequest } from './auth.interface';
 import { otpVerifyResult } from './interface/otpVerify.interface'; 
 import { EmailVerifyResult } from './interface/emailVerify.interface';
-import { Controller, Post, Get, Body, Query, HttpCode, HttpStatus }  from '@nestjs/common';
+import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
 
 @Controller('auth')
 export class AuthController {
@@ -34,5 +36,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async otpVerify(@Body() body: OtpVerifyDto): Promise<otpVerifyResult> {
     return this.authService.otpVerify(body);
+  }
+
+  @Patch('2fa')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async update2fa(@Body() body: update2faDto, @Req() req: AuthenticatedRequest): Promise<void> {
+    await this.authService.update2fa(body, req);
   }
 }

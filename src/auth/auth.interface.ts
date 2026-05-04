@@ -1,12 +1,13 @@
 import { Request } from 'express';
 
+export interface JwtAuthUser {
+  sub: number;
+  email: string;
+  type: string;
+  iat?: number;
+  exp?: number;
+}
+
 export interface AuthenticatedRequest extends Request {
-  
-  user?: {
-    id: number,
-    name: string,
-    email: string,
-    two_fa: Boolean,
-    join_date: Date
-  };
+  user: JwtAuthUser;
 }

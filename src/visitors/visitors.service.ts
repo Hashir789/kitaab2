@@ -62,6 +62,7 @@ export class VisitorService {
         JOIN visitors v ON v.id = i.visitor_id;
       `, [name, email, subject, phone, message, anonymous_id]);
       if (!rows?.length) {
+        this.loggerService.error('Visitor not found', HttpStatus.NOT_FOUND);
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
       await this.emailService.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone });
@@ -86,6 +87,7 @@ export class VisitorService {
         RETURNING *;
       `, [email, anonymous_id]);
       if (!rows?.length) {
+        this.loggerService.error('Visitor not found', HttpStatus.NOT_FOUND);
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
       const { timezone, created_at } = rows[0];
