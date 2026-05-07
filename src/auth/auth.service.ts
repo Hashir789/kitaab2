@@ -1,4 +1,5 @@
 import { StringValue } from 'ms';
+import { randomBytes } from 'crypto';
 import { hash, compare } from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import { JwtService } from '@nestjs/jwt';
@@ -9,14 +10,19 @@ import { Logger } from '../logger/logger.service';
 import { OtpVerifyDto } from './dto/otpVerify.dto';
 import { update2faDto } from './dto/update2fa.dto';
 import { EmailService } from '../email/email.service';
+import { AuthenticatedRequest } from './auth.interface';
+import { ResetPasswordDto } from './dto/reset-password.dto';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { RedisService } from '../database/redis/redis.service';
+import { verifyOtpResult } from './interface/verifyOtp.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { loginQueryInterface, loginResult } from './interface/login.interface';
 import { signupQueryInterface, signupResult } from './interface/signup.interface';
+import { ResetPasswordQueryInterface } from './interface/resetPassword.interface';
+import { ForgotPasswordQueryInterface } from './interface/forgotPassword.interface';
 import { otpVerifyQueryInterface, otpVerifyResult } from './interface/otpVerify.interface';
 import { EmailVerifyQueryInterface, EmailVerifyResult } from './interface/emailVerify.interface';
-import { verifyOtpResult } from './interface/verifyOtp.interface';
-import { AuthenticatedRequest } from './auth.interface';
 import { Update2FaGetQueryInterface, Update2FaPatchQueryInterface } from './interface/update2fa.interface';
 
 @Injectable()
@@ -26,6 +32,7 @@ export class AuthService {
     private readonly loggerService: Logger,
     private readonly jwtService: JwtService,
     private readonly emailService: EmailService,
+    private readonly redisService: RedisService,
     private readonly configService: ConfigService,
     private readonly postgresService: PostgresService
   ) {}
@@ -85,9 +92,13 @@ export class AuthService {
         SELECT id, password_hash, full_name, email, gender, dob, created_at, two_factor_enabled
         FROM users WHERE email = $1
       `, [mail]);
+      if (!rows?.length) {
+        this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
+      }
       const { id, email: userEmail, password_hash, dob, email, gender, full_name, created_at, two_factor_enabled } = rows[0];
-      const hashPassword = await compare(password + pepper, password_hash)
-      if (!rows.length || !hashPassword) {
+      const hashPassword = await compare(password + pepper, password_hash);
+      if (!hashPassword) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
@@ -136,6 +147,70 @@ export class AuthService {
         `, [mail]);
       }
       return { verified: true };
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? 500);
+      throw new HttpException(error.message, error.status ?? 500);
+    }
+  }
+
+  async forgotPassword(payload: ForgotPasswordDto): Promise<void> {
+    try {
+      this.loggerService.log('forgotPassword {controller}');
+      const { email: mail } = payload;
+      const rows = await this.postgresService.query<ForgotPasswordQueryInterface>(
+        `SELECT id, full_name FROM users WHERE email = $1`,
+        [mail],
+      );
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const { id, full_name } = rows[0];
+      const token = randomBytes(32).toString('hex');
+      const ttlSeconds =
+        Number(this.configService.get<string>('PASSWORD_RESET_EXPIRES_IN_SECONDS')) || 3600;
+      await this.redisService.set(`password-reset:${token}`, String(id), ttlSeconds);
+      const baseUrl = this.configService.get<string>('PASSWORD_RESET_URL_BASE')?.replace(/\/$/, '');
+      const resetLink = baseUrl ? `${baseUrl}?token=${encodeURIComponent(token)}` : null;
+      const expiresInMinutes = Math.max(1, Math.ceil(ttlSeconds / 60));
+      await this.emailService.sendPasswordResetEmail({
+        email: mail,
+        name: full_name,
+        resetLink,
+        plainToken: resetLink ? undefined : token,
+        expiresInMinutes
+      });
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? 500);
+      throw new HttpException(error.message, error.status ?? 500);
+    }
+  }
+
+  async resetPassword(payload: ResetPasswordDto): Promise<void> {
+    try {
+      this.loggerService.log('resetPassword {controller}');
+      const { token, new_password } = payload;
+      const key = `password-reset:${token}`;
+      const userId = await this.redisService.get(key);
+      if (!userId) {
+        this.loggerService.error('Invalid or expired token', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
+      }
+
+      const pepper = this.configService.get<string>('PASSWORD_PEPPER') ?? '';
+      const passwordHash = await hash(new_password + pepper, 12);
+      const updated = await this.postgresService.query<ResetPasswordQueryInterface>(`
+        UPDATE users
+        SET password_hash = $1
+        WHERE id = $2
+        RETURNING id
+      `, [passwordHash, userId]);
+      if (!updated?.length) {
+        this.loggerService.error('Invalid or expired token', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
+      }
+
+      await this.redisService.del(key);
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? 500);
       throw new HttpException(error.message, error.status ?? 500);

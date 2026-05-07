@@ -5,7 +5,9 @@ import { OtpVerifyDto } from './dto/otpVerify.dto';
 import { update2faDto } from './dto/update2fa.dto';
 import { signupResult } from './interface/signup.interface';
 import { EmailVerifyQueryDto } from './dto/emailVerify.dto';
+import { ResetPasswordDto } from './dto/reset-password.dto';
 import type { AuthenticatedRequest } from './auth.interface';
+import { ForgotPasswordDto } from './dto/forgot-password.dto';
 import { otpVerifyResult } from './interface/otpVerify.interface'; 
 import { EmailVerifyResult } from './interface/emailVerify.interface';
 import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
@@ -42,5 +44,17 @@ export class AuthController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async update2fa(@Body() body: update2faDto, @Req() req: AuthenticatedRequest): Promise<void> {
     await this.authService.update2fa(body, req);
+  }
+
+  @Post('forgot-password')
+  @HttpCode(HttpStatus.OK)
+  async forgotPassword(@Body() body: ForgotPasswordDto): Promise<void> {
+    await this.authService.forgotPassword(body);
+  }
+
+  @Post('reset-password')
+  @HttpCode(HttpStatus.OK)
+  async resetPassword(@Body() body: ResetPasswordDto): Promise<void> {
+    await this.authService.resetPassword(body);
   }
 }

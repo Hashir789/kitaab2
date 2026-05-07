@@ -25,6 +25,11 @@ export class RedisService {
     return this.redis.get(key);
   }
 
+  async del(key: string): Promise<number> {
+    this.loggerService.log('del {query}');
+    return this.redis.del(key);
+  }
+
   async ping(): Promise<void> {
     await this.redis.ping();
   }
