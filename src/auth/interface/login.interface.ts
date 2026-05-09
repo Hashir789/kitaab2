@@ -29,5 +29,6 @@ export interface loginQueryInterface {
   created_at: Date;
   full_name: string;
   password_hash: string;
+  email_verified: boolean;
   two_factor_enabled: boolean;
 }

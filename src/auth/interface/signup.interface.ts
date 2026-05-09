@@ -18,5 +18,6 @@ export interface signupQueryInterface {
   full_name: string;
   access_token: string;
   refresh_token: string;
+  email_verified: string;
   two_factor_enabled: boolean;
 }

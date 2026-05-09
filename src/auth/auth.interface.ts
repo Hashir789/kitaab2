@@ -2,10 +2,11 @@ import { Request } from 'express';
 
 export interface JwtAuthUser {
   sub: number;
-  email: string;
   type: string;
   iat?: number;
   exp?: number;
+  email: string;
+  email_verified: boolean;
 }
 
 export interface AuthenticatedRequest extends Request {

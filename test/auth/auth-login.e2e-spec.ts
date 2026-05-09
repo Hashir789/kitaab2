@@ -22,6 +22,24 @@ describe('AuthController (e2e) - POST /auth/login', () => {
   const jwtSignAsyncMock = jest.fn();
   const configGetMock = jest.fn();
 
+  const validPayload = {
+    email: 'muhammad@example.com',
+    password: 'password123',
+    anonymous_id: 'anon_123',
+  };
+
+  const userRow = {
+    id: 1,
+    password_hash: 'stored-hash',
+    full_name: 'Muhammad Hashir',
+    email: 'muhammad@example.com',
+    gender: 'male',
+    dob: '2000-01-01',
+    created_at: new Date('2026-01-01T00:00:00.000Z'),
+    two_factor_enabled: false,
+    email_verified: true,
+  };
+
   beforeEach(async () => {
     postgresQueryMock.mockReset();
     jwtSignAsyncMock.mockReset();
@@ -81,37 +99,172 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     jest.restoreAllMocks();
   });
 
-  it('POST /auth/login -> 200 and returns tokens', async () => {
-    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+  it('-> 400 when payload empty', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({})
+      .expect(400);
 
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when email missing', async () => {
+    const { email, ...rest } = validPayload;
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(rest)
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when email invalid', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ ...validPayload, email: 'not-an-email' })
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when password missing', async () => {
+    const { password, ...rest } = validPayload;
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(rest)
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when password too short', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ ...validPayload, password: 'short' })
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when anonymous_id missing', async () => {
+    const { anonymous_id, ...rest } = validPayload;
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(rest)
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when payload contains forbidden extra fields', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ ...validPayload, admin: true })
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 401 when email not found', async () => {
+    postgresQueryMock.mockResolvedValueOnce([]);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send({ ...validPayload, email: 'missing@example.com' })
+      .expect(401);
+
+    expect(compare).not.toHaveBeenCalled();
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 401 when select returns null/undefined', async () => {
+    postgresQueryMock.mockResolvedValueOnce(undefined);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(401);
+
+    expect(compare).not.toHaveBeenCalled();
+  });
+
+  it('-> 401 when password mismatch', async () => {
+    postgresQueryMock.mockResolvedValueOnce([userRow]);
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(false);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(401);
+
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when select throws', async () => {
+    postgresQueryMock.mockRejectedValueOnce(new Error('db down'));
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(500);
+
+    expect(compare).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when bcrypt.compare throws', async () => {
+    postgresQueryMock.mockResolvedValueOnce([userRow]);
+    (compare as unknown as jest.Mock).mockRejectedValueOnce(new Error('bcrypt boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(500);
+
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when last_login update throws', async () => {
     postgresQueryMock
-      .mockResolvedValueOnce([
-        {
-          id: 1,
-          password_hash: 'hash',
-          full_name: 'Muhammad Hashir',
-          email: 'muhammad@example.com',
-          gender: 'male',
-          dob: '2000-01-01',
-          created_at: createdAt,
-          two_factor_enabled: false,
-        },
-      ])
+      .mockResolvedValueOnce([userRow])
+      .mockRejectedValueOnce(new Error('db down'));
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(500);
+
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when jwt sign throws', async () => {
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
       .mockResolvedValueOnce([]);
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+    jwtSignAsyncMock.mockRejectedValueOnce(new Error('jwt boom'));
 
-    (compare as unknown as jest.Mock).mockResolvedValue(true);
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(500);
+  });
 
+  it('-> 200 and returns tokens on happy path', async () => {
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
+      .mockResolvedValueOnce([]);
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
     jwtSignAsyncMock
       .mockResolvedValueOnce('access-token')
       .mockResolvedValueOnce('refresh-token');
 
     await request(app.getHttpServer())
       .post('/auth/login')
-      .send({
-        email: 'muhammad@example.com',
-        password: 'password123',
-        anonymous_id: 'anon_123',
-      })
+      .send(validPayload)
       .expect(200)
       .expect((res) => {
         expect(res.body).toEqual({
@@ -119,70 +272,15 @@ describe('AuthController (e2e) - POST /auth/login', () => {
           email: 'muhammad@example.com',
           gender: 'male',
           full_name: 'Muhammad Hashir',
-          created_at: createdAt.toISOString(),
+          created_at: userRow.created_at.toISOString(),
           two_factor_enabled: false,
           access_token: 'access-token',
           refresh_token: 'refresh-token',
         });
       });
 
+    expect(compare).toHaveBeenCalledWith('password123' + 'pepper', 'stored-hash');
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
-    expect(compare).toHaveBeenCalledTimes(1);
     expect(jwtSignAsyncMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('POST /auth/login -> 401 when password invalid', async () => {
-    postgresQueryMock.mockResolvedValueOnce([
-      {
-        id: 1,
-        password_hash: 'hash',
-        full_name: 'Muhammad Hashir',
-        email: 'muhammad@example.com',
-        gender: 'male',
-        dob: '2000-01-01',
-        created_at: new Date('2026-01-01T00:00:00.000Z'),
-        two_factor_enabled: false,
-      },
-    ]);
-
-    (compare as unknown as jest.Mock).mockResolvedValue(false);
-
-    await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({
-        email: 'muhammad@example.com',
-        password: 'wrongpass123',
-        anonymous_id: 'anon_123',
-      })
-      .expect(401);
-
-    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
-  });
-
-  it('POST /auth/login -> 401 when email not found', async () => {
-    postgresQueryMock.mockResolvedValueOnce([]);
-
-    await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({
-        email: 'missing@example.com',
-        password: 'password123',
-        anonymous_id: 'anon_123',
-      })
-      .expect(401);
-
-    expect(compare).not.toHaveBeenCalled();
-    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
-  });
-
-  it('POST /auth/login -> 400 when payload invalid', async () => {
-    await request(app.getHttpServer())
-      .post('/auth/login')
-      .send({
-        email: 'not-an-email',
-        password: 'short',
-        anonymous_id: '',
-      })
-      .expect(400);
   });
 });

@@ -2,7 +2,7 @@ import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
 import { AuthenticatedRequest, JwtAuthUser } from './auth.interface';
-import { Injectable, CanActivate, ExecutionContext, UnauthorizedException, HttpException } from '@nestjs/common';
+import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } from '@nestjs/common';
 
 @Injectable()
 export class JwtAuthGuard implements CanActivate {
@@ -13,7 +13,7 @@ export class JwtAuthGuard implements CanActivate {
     '/health-check',
     '/visitors/track',
     '/visitors/email',
-    '/auth/verify-otp',
+    '/auth/otp-verify',
     '/visitors/message',
     '/auth/email-verify',
     '/auth/reset-password',
@@ -36,20 +36,32 @@ export class JwtAuthGuard implements CanActivate {
     }
     const authHeader: string | undefined = request.headers['authorization'];
     if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Authorization header not found or malformed');
+      this.loggerService.error('Authorization header not found or malformed', HttpStatus.UNAUTHORIZED);
+      throw new HttpException('Authorization header not found or malformed', HttpStatus.UNAUTHORIZED);
     }
     const token: string = authHeader.split(' ')[1];
+    const publicKey: string = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
+    let payload: JwtAuthUser;
     try {
-      const publicKey: string = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
-      const payload = (await this.jwtService.verifyAsync(token, {
+      payload = (await this.jwtService.verifyAsync(token, {
         publicKey,
         algorithms: ['RS256'],
       })) as JwtAuthUser;
-      request.user = payload;
-      return true;
-    } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+    } catch {
+      this.loggerService.error('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+      throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
     }
+
+    if (payload?.type !== 'access') {
+      this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+      throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+    }
+    if (!payload.email_verified) {
+      this.loggerService.error('Email not verified', HttpStatus.FORBIDDEN);
+      throw new HttpException('Email not verified', HttpStatus.FORBIDDEN);
+    }
+
+    request.user = payload;
+    return true;
   }
 }

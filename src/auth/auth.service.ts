@@ -13,6 +13,7 @@ import { EmailService } from '../email/email.service';
 import { AuthenticatedRequest } from './auth.interface';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { RedisService } from '../database/redis/redis.service';
 import { verifyOtpResult } from './interface/verifyOtp.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
@@ -21,6 +22,7 @@ import { loginQueryInterface, loginResult } from './interface/login.interface';
 import { signupQueryInterface, signupResult } from './interface/signup.interface';
 import { ResetPasswordQueryInterface } from './interface/resetPassword.interface';
 import { ForgotPasswordQueryInterface } from './interface/forgotPassword.interface';
+import { ChangePasswordQueryInterface } from './interface/changePassword.interface';
 import { otpVerifyQueryInterface, otpVerifyResult } from './interface/otpVerify.interface';
 import { EmailVerifyQueryInterface, EmailVerifyResult } from './interface/emailVerify.interface';
 import { Update2FaGetQueryInterface, Update2FaPatchQueryInterface } from './interface/update2fa.interface';
@@ -61,11 +63,11 @@ export class AuthService {
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
 
-      const { id, full_name, email, gender, dob, two_factor_enabled, created_at } = rows[0];
-      const accessToken = await this.jwtService.signAsync({ sub: id, email: email, type: 'access' });
+      const { id, full_name, email, gender, dob, two_factor_enabled, created_at, email_verified } = rows[0];
+      const accessToken = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified });
       const refreshExpiresIn = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
       const refreshToken = await this.jwtService.signAsync(
-        { sub: id, email: email, type: 'refresh' },
+        { sub: id, email, type: 'refresh' },
         { expiresIn: refreshExpiresIn }
       );
       const expiresInMinutes =
@@ -78,8 +80,8 @@ export class AuthService {
       });
       return { dob, email, gender, full_name, created_at, two_factor_enabled, access_token: accessToken, refresh_token: refreshToken };
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -89,14 +91,14 @@ export class AuthService {
       const { email: mail, password, anonymous_id } = payload;
       const pepper = this.configService.get<string>('PASSWORD_PEPPER');
       const rows = await this.postgresService.query<loginQueryInterface>(`
-        SELECT id, password_hash, full_name, email, gender, dob, created_at, two_factor_enabled
+        SELECT id, password_hash, full_name, email, gender, dob, created_at, two_factor_enabled, email_verified
         FROM users WHERE email = $1
       `, [mail]);
       if (!rows?.length) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
-      const { id, email: userEmail, password_hash, dob, email, gender, full_name, created_at, two_factor_enabled } = rows[0];
+      const { id, email: userEmail, password_hash, dob, email, gender, full_name, created_at, two_factor_enabled, email_verified } = rows[0];
       const hashPassword = await compare(password + pepper, password_hash);
       if (!hashPassword) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
@@ -112,7 +114,7 @@ export class AuthService {
           u.id = $1
           AND v.anonymous_id = $2
       `, [id, anonymous_id]);
-      const accessToken = await this.jwtService.signAsync({ sub: id, email: userEmail, type: 'access' });
+      const accessToken = await this.jwtService.signAsync({ sub: id, email: userEmail, type: 'access', email_verified });
       const refreshExpiresIn = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
       const refreshToken = await this.jwtService.signAsync(
         { sub: id, email: userEmail, type: 'refresh' },
@@ -120,8 +122,8 @@ export class AuthService {
       );
       return { dob, email, gender, full_name, created_at, two_factor_enabled, access_token: accessToken, refresh_token: refreshToken };
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -148,8 +150,8 @@ export class AuthService {
       }
       return { verified: true };
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -181,8 +183,8 @@ export class AuthService {
         expiresInMinutes
       });
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -212,8 +214,52 @@ export class AuthService {
 
       await this.redisService.del(key);
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async changePassword(payload: ChangePasswordDto, req: AuthenticatedRequest): Promise<void> {
+    try {
+      this.loggerService.log('changePassword {controller}');
+      const { sub: user_id, email, type: token_type } = req.user;
+      const { current_password, new_password } = payload;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      if (current_password === new_password) {
+        this.loggerService.error('New password must be different from current password', HttpStatus.BAD_REQUEST);
+        throw new HttpException('New password must be different from current password', HttpStatus.BAD_REQUEST);
+      }
+      const rows = await this.postgresService.query<ChangePasswordQueryInterface>(`
+        SELECT id, password_hash FROM users WHERE id = $1 AND email = $2
+      `, [user_id, email]);
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+      }
+      const { password_hash } = rows[0];
+      const pepper = this.configService.get<string>('PASSWORD_PEPPER') ?? '';
+      const matches = await compare(current_password + pepper, password_hash);
+      if (!matches) {
+        this.loggerService.error('Invalid current password', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid current password', HttpStatus.UNAUTHORIZED);
+      }
+      const newPasswordHash = await hash(new_password + pepper, 12);
+      const updated = await this.postgresService.query<ChangePasswordQueryInterface>(`
+        UPDATE users
+        SET password_hash = $1
+        WHERE id = $2 AND email = $3
+        RETURNING id
+      `, [newPasswordHash, user_id, email]);
+      if (!updated?.length) {
+        this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+      }
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -228,8 +274,8 @@ export class AuthService {
       }
       return { verified: rows[0].email_verified };  
     } catch(error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -246,8 +292,8 @@ export class AuthService {
         SELECT email_verified FROM users WHERE id = $1 AND email = $2
       `, [user_id, email]);
       if (!rows?.length) {
-        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+        this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
       }
       const { email_verified } = rows[0];
       if (email_verified) {
@@ -256,16 +302,16 @@ export class AuthService {
           RETURNING two_factor_enabled
         `, [two_factor_enabled, user_id, email]);
         if (!updated?.length) {
-          this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
-          throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+          this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
+          throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
         }
       } else {
-        this.loggerService.error('Email not verified', HttpStatus.BAD_REQUEST);
-        throw new HttpException('Email not verified', HttpStatus.BAD_REQUEST);
+        this.loggerService.error('Email not verified', HttpStatus.FORBIDDEN);
+        throw new HttpException('Email not verified', HttpStatus.FORBIDDEN);
       }
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 

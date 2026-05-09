@@ -1,6 +1,6 @@
 import { Logger } from '../logger/logger.service';
-import { Injectable, HttpException } from '@nestjs/common';
 import { RedisService } from '../database/redis/redis.service';
+import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { CheckDatabaseConnectionsResponseInterface } from './interface/CheckDatabaseConnections.interface';
 
@@ -19,8 +19,8 @@ export class AppService {
     try {
       this.loggerService.log('healthCheck {controller}');
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
   
@@ -33,8 +33,8 @@ export class AppService {
         postgres: postgres.status === 'fulfilled'
       };
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 

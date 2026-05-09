@@ -40,8 +40,8 @@ export class VisitorService {
           last_visited = NOW()
       `, [anonymous_id, clientIp, city, country, timezone, device_type]);
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -67,8 +67,8 @@ export class VisitorService {
       }
       await this.emailService.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone });
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 
@@ -93,8 +93,8 @@ export class VisitorService {
       const { timezone, created_at } = rows[0];
       await this.emailService.sendVisitorEmailCopy({ email, timezone, created_at });
     } catch (error) {
-      this.loggerService.error(error.message, error.status ?? 500);
-      throw new HttpException(error.message, error.status ?? 500);
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
 

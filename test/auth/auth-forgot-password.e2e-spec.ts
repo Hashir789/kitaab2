@@ -16,7 +16,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
   const postgresQueryMock = jest.fn();
   const sendPasswordResetEmailMock = jest.fn();
 
-  beforeEach(async () => {
+  const setupApp = async (configOverrides: Record<string, any> = {}) => {
     redisSetMock.mockReset();
     configGetMock.mockReset();
     postgresQueryMock.mockReset();
@@ -27,6 +27,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
         PASSWORD_PEPPER: 'pepper',
         PASSWORD_RESET_EXPIRES_IN_SECONDS: '3600',
         PASSWORD_RESET_URL_BASE: '',
+        ...configOverrides,
       };
       return table[key];
     });
@@ -44,15 +45,15 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
-        set: redisSetMock
+        set: redisSetMock,
       })
       .overrideProvider(EmailService)
       .useValue({
-        sendPasswordResetEmail: sendPasswordResetEmailMock
+        sendPasswordResetEmail: sendPasswordResetEmailMock,
       })
       .overrideProvider(ConfigService)
       .useValue({
-        get: configGetMock
+        get: configGetMock,
       })
       .compile();
 
@@ -61,15 +62,46 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
       new ValidationPipe({
         whitelist: true,
         forbidNonWhitelisted: true,
-        transform: true
-      })
+        transform: true,
+      }),
     );
     await app.init();
+  };
+
+  beforeEach(async () => {
+    await setupApp();
   });
 
   afterEach(async () => {
     await app.close();
     jest.restoreAllMocks();
+  });
+
+  it('-> 400 when payload empty', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({})
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when email invalid', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'not-an-email' })
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when payload contains forbidden extra fields', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'muhammad@example.com', admin: true })
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
   it('-> 404 when email not found', async () => {
@@ -84,7 +116,53 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
     expect(sendPasswordResetEmailMock).not.toHaveBeenCalled();
   });
 
-  it('-> 200 and sends email when user exists', async () => {
+  it('-> 404 when select returns null/undefined', async () => {
+    postgresQueryMock.mockResolvedValueOnce(undefined);
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'muhammad@example.com' })
+      .expect(404);
+
+    expect(redisSetMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when select throws', async () => {
+    postgresQueryMock.mockRejectedValueOnce(new Error('db down'));
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'muhammad@example.com' })
+      .expect(500);
+
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(sendPasswordResetEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when redis.set throws', async () => {
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1, full_name: 'Muhammad' }]);
+    redisSetMock.mockRejectedValueOnce(new Error('redis boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'muhammad@example.com' })
+      .expect(500);
+
+    expect(sendPasswordResetEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when email send throws', async () => {
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1, full_name: 'Muhammad' }]);
+    redisSetMock.mockResolvedValue(undefined);
+    sendPasswordResetEmailMock.mockRejectedValueOnce(new Error('smtp boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'muhammad@example.com' })
+      .expect(500);
+  });
+
+  it('-> 200 and sends email with plainToken when reset URL not configured', async () => {
     postgresQueryMock.mockResolvedValueOnce([{ id: 1, full_name: 'Muhammad' }]);
     redisSetMock.mockResolvedValue(undefined);
     sendPasswordResetEmailMock.mockResolvedValue(undefined);
@@ -96,13 +174,46 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
       .expect('');
 
     expect(redisSetMock).toHaveBeenCalledTimes(1);
+    expect(redisSetMock).toHaveBeenCalledWith(
+      expect.stringMatching(/^password-reset:[a-f0-9]{64}$/),
+      '1',
+      3600,
+    );
     expect(sendPasswordResetEmailMock).toHaveBeenCalledTimes(1);
     expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'muhammad@example.com',
         name: 'Muhammad',
+        resetLink: null,
+        plainToken: expect.any(String),
         expiresInMinutes: 60,
-      })
+      }),
+    );
+  });
+
+  it('-> 200 and sends email with resetLink when reset URL configured', async () => {
+    await app.close();
+    await setupApp({ PASSWORD_RESET_URL_BASE: 'https://app.example.com/reset' });
+
+    postgresQueryMock.mockResolvedValueOnce([{ id: 2, full_name: 'Hashir' }]);
+    redisSetMock.mockResolvedValue(undefined);
+    sendPasswordResetEmailMock.mockResolvedValue(undefined);
+
+    await request(app.getHttpServer())
+      .post('/auth/forgot-password')
+      .send({ email: 'hashir@example.com' })
+      .expect(200);
+
+    expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        email: 'hashir@example.com',
+        name: 'Hashir',
+        resetLink: expect.stringMatching(
+          /^https:\/\/app\.example\.com\/reset\?token=[a-f0-9]{64}$/,
+        ),
+        plainToken: undefined,
+        expiresInMinutes: 60,
+      }),
     );
   });
 });

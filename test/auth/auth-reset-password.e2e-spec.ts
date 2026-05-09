@@ -23,6 +23,8 @@ describe('AuthController (e2e) - POST /auth/reset-password', () => {
   const configGetMock = jest.fn();
   const postgresQueryMock = jest.fn();
 
+  const validPayload = { token: 'good-token', new_password: 'password123' };
+
   beforeEach(async () => {
     redisGetMock.mockReset();
     redisDelMock.mockReset();
@@ -32,33 +34,33 @@ describe('AuthController (e2e) - POST /auth/reset-password', () => {
 
     configGetMock.mockImplementation((key: string) => {
       const table: Record<string, any> = {
-        PASSWORD_PEPPER: 'pepper'
+        PASSWORD_PEPPER: 'pepper',
       };
       return table[key];
     });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
-      imports: [AppModule]
+      imports: [AppModule],
     })
       .overrideProvider(PostgresService)
       .useValue({
         query: postgresQueryMock,
-        ping: jest.fn()
+        ping: jest.fn(),
       })
       .overrideProvider(RedisService)
       .useValue({
         set: jest.fn(),
         ping: jest.fn(),
         get: redisGetMock,
-        del: redisDelMock
+        del: redisDelMock,
       })
       .overrideProvider(EmailService)
       .useValue({
-        sendPasswordResetEmail: jest.fn()
+        sendPasswordResetEmail: jest.fn(),
       })
       .overrideProvider(ConfigService)
       .useValue({
-        get: configGetMock
+        get: configGetMock,
       })
       .compile();
 
@@ -67,7 +69,7 @@ describe('AuthController (e2e) - POST /auth/reset-password', () => {
       new ValidationPipe({
         whitelist: true,
         transform: true,
-        forbidNonWhitelisted: true
+        forbidNonWhitelisted: true,
       }),
     );
     await app.init();
@@ -78,30 +80,144 @@ describe('AuthController (e2e) - POST /auth/reset-password', () => {
     jest.restoreAllMocks();
   });
 
+  it('-> 400 when payload empty', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({})
+      .expect(400);
+
+    expect(redisGetMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when token missing', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({ new_password: 'password123' })
+      .expect(400);
+
+    expect(redisGetMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when new_password missing', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({ token: 'good-token' })
+      .expect(400);
+
+    expect(redisGetMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when new_password too short', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({ ...validPayload, new_password: 'short' })
+      .expect(400);
+
+    expect(redisGetMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when payload contains forbidden extra fields', async () => {
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send({ ...validPayload, admin: true })
+      .expect(400);
+
+    expect(redisGetMock).not.toHaveBeenCalled();
+  });
+
   it('-> 400 when token invalid/expired', async () => {
     redisGetMock.mockResolvedValueOnce(null);
 
     await request(app.getHttpServer())
       .post('/auth/reset-password')
-      .send({ token: 'bad-token', new_password: 'password123' })
+      .send({ ...validPayload, token: 'bad-token' })
       .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+    expect(hash as unknown as jest.Mock).not.toHaveBeenCalled();
+    expect(redisDelMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when update returns no rows', async () => {
+    redisGetMock.mockResolvedValueOnce('1');
+    (hash as unknown as jest.Mock).mockResolvedValueOnce('hash');
+    postgresQueryMock.mockResolvedValueOnce([]);
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send(validPayload)
+      .expect(400);
+
+    expect(redisDelMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when redis.get throws', async () => {
+    redisGetMock.mockRejectedValueOnce(new Error('redis boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send(validPayload)
+      .expect(500);
+
+    expect(hash as unknown as jest.Mock).not.toHaveBeenCalled();
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when bcrypt.hash throws', async () => {
+    redisGetMock.mockResolvedValueOnce('1');
+    (hash as unknown as jest.Mock).mockRejectedValueOnce(new Error('bcrypt boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send(validPayload)
+      .expect(500);
 
     expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
-  it('-> 200 when token valid', async () => {
+  it('-> 500 mapped when postgres update throws', async () => {
     redisGetMock.mockResolvedValueOnce('1');
     (hash as unknown as jest.Mock).mockResolvedValueOnce('hash');
+    postgresQueryMock.mockRejectedValueOnce(new Error('db down'));
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send(validPayload)
+      .expect(500);
+
+    expect(redisDelMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when redis.del throws', async () => {
+    redisGetMock.mockResolvedValueOnce('1');
+    (hash as unknown as jest.Mock).mockResolvedValueOnce('hash');
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
+    redisDelMock.mockRejectedValueOnce(new Error('redis boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/reset-password')
+      .send(validPayload)
+      .expect(500);
+  });
+
+  it('-> 200 and clears token on happy path', async () => {
+    redisGetMock.mockResolvedValueOnce('1');
+    (hash as unknown as jest.Mock).mockResolvedValueOnce('new-hash');
     postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
     redisDelMock.mockResolvedValueOnce(1);
 
     await request(app.getHttpServer())
       .post('/auth/reset-password')
-      .send({ token: 'good-token', new_password: 'password123' })
+      .send(validPayload)
       .expect(200)
       .expect('');
 
+    expect(redisGetMock).toHaveBeenCalledWith('password-reset:good-token');
+    expect(hash as unknown as jest.Mock).toHaveBeenCalledWith(
+      'password123' + 'pepper',
+      12,
+    );
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
-    expect(redisDelMock).toHaveBeenCalledTimes(1);
+    expect(redisDelMock).toHaveBeenCalledWith('password-reset:good-token');
   });
 });

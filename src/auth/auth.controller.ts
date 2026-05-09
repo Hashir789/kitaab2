@@ -8,6 +8,7 @@ import { EmailVerifyQueryDto } from './dto/emailVerify.dto';
 import { ResetPasswordDto } from './dto/reset-password.dto';
 import type { AuthenticatedRequest } from './auth.interface';
 import { ForgotPasswordDto } from './dto/forgot-password.dto';
+import { ChangePasswordDto } from './dto/change-password.dto';
 import { otpVerifyResult } from './interface/otpVerify.interface'; 
 import { EmailVerifyResult } from './interface/emailVerify.interface';
 import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus, UnauthorizedException } from '@nestjs/common';
@@ -56,5 +57,11 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async resetPassword(@Body() body: ResetPasswordDto): Promise<void> {
     await this.authService.resetPassword(body);
+  }
+
+  @Patch('password')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async changePassword(@Body() body: ChangePasswordDto, @Req() req: AuthenticatedRequest): Promise<void> {
+    await this.authService.changePassword(body, req);
   }
 }
