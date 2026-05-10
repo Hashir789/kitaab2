@@ -8,13 +8,16 @@ import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } 
 export class JwtAuthGuard implements CanActivate {
 
   private readonly excludedUrls: string[] = [
+    '/auth/me',
     '/auth/login',
     '/auth/signup',
+    '/auth/refresh',
     '/health-check',
     '/visitors/track',
     '/visitors/email',
     '/auth/otp-verify',
     '/visitors/message',
+    '/auth/resend-link',
     '/auth/email-verify',
     '/auth/reset-password',
     '/auth/forgot-password',
@@ -30,7 +33,10 @@ export class JwtAuthGuard implements CanActivate {
   async canActivate(context: ExecutionContext): Promise<boolean> {
     this.loggerService.log('canActivate {guard}');
     const request: AuthenticatedRequest = context.switchToHttp().getRequest();
-    const baseUrl = request.url.split('?')[0];
+    const baseUrl =
+      typeof request.path === 'string' && request.path.length > 0
+        ? request.path
+        : String(request.url ?? '').split('?')[0];
     if (this.excludedUrls.includes(baseUrl)) {
       return true;
     }

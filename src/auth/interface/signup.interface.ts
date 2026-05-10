@@ -9,7 +9,7 @@ export interface signupResult {
   two_factor_enabled: boolean;
 }
 
-export interface signupQueryInterface {
+export interface signupInsertQueryInterface {
   id: number;
   dob: string;
   email: string;
@@ -20,4 +20,8 @@ export interface signupQueryInterface {
   refresh_token: string;
   email_verified: string;
   two_factor_enabled: boolean;
+}
+
+export interface signupUpdateQueryInterface {
+  id: number;
 }

@@ -256,6 +256,7 @@ describe('AuthController (e2e) - POST /auth/login', () => {
   it('-> 200 and returns tokens on happy path', async () => {
     postgresQueryMock
       .mockResolvedValueOnce([userRow])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
     jwtSignAsyncMock
@@ -280,7 +281,7 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       });
 
     expect(compare).toHaveBeenCalledWith('password123' + 'pepper', 'stored-hash');
-    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+    expect(postgresQueryMock).toHaveBeenCalledTimes(3);
     expect(jwtSignAsyncMock).toHaveBeenCalledTimes(2);
   });
 });

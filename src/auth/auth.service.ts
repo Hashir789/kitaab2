@@ -1,31 +1,37 @@
 import { StringValue } from 'ms';
-import { randomBytes } from 'crypto';
 import { hash, compare } from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import { JwtService } from '@nestjs/jwt';
+import { MeQueryDto } from './dto/me.dto';
 import { LoginDto } from './dto/login.dto';
 import { SignupDto } from './dto/signup.dto';
 import { ConfigService } from '@nestjs/config';
+import { RefreshDto } from './dto/refresh.dto';
+import { createHash, randomBytes } from 'crypto';
 import { Logger } from '../logger/logger.service';
 import { OtpVerifyDto } from './dto/otpVerify.dto';
 import { update2faDto } from './dto/update2fa.dto';
+import { MeResult } from './interface/me.interface';
+import { ResendLinkDto } from './dto/resendLink.dto';
 import { EmailService } from '../email/email.service';
 import { AuthenticatedRequest } from './auth.interface';
 import { ResetPasswordDto } from './dto/reset-password.dto';
-import { ForgotPasswordDto } from './dto/forgot-password.dto';
-import { ChangePasswordDto } from './dto/change-password.dto';
+import { ForgotPasswordDto } from './dto/forgotPassword.dto';
+import { ChangePasswordDto } from './dto/changePassword.dto';
 import { RedisService } from '../database/redis/redis.service';
 import { verifyOtpResult } from './interface/verifyOtp.interface';
+import { signupInsertQueryInterface, signupUpdateQueryInterface } from './interface/signup.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { loginQueryInterface, loginResult } from './interface/login.interface';
-import { signupQueryInterface, signupResult } from './interface/signup.interface';
 import { ResetPasswordQueryInterface } from './interface/resetPassword.interface';
 import { ForgotPasswordQueryInterface } from './interface/forgotPassword.interface';
 import { ChangePasswordQueryInterface } from './interface/changePassword.interface';
 import { otpVerifyQueryInterface, otpVerifyResult } from './interface/otpVerify.interface';
 import { EmailVerifyQueryInterface, EmailVerifyResult } from './interface/emailVerify.interface';
+import { refreshTokenQueryInterface, refreshTokenResultInterface } from './interface/refresh.interface';
 import { Update2FaGetQueryInterface, Update2FaPatchQueryInterface } from './interface/update2fa.interface';
+import { resendLinkGetQueryInterface, resendLinkUpdateQueryInterface } from './interface/resendLink.interface';
 
 @Injectable()
 export class AuthService {
@@ -41,14 +47,14 @@ export class AuthService {
 
   // Controller functions
 
-  async signup(payload: SignupDto): Promise<signupResult> {
+  async signup(payload: SignupDto): Promise<void> {
     try {
       this.loggerService.log('signup {controller}');
       const { anonymous_id, full_name: fullName, email: mail, password, gender: sex, dob: dateOfBirth } = payload;
       const pepper = this.configService.get<string>('PASSWORD_PEPPER');
       const passwordHash = await hash(password + pepper, 12);
       const [otp, secret] = this.generateOtp();
-      const rows = await this.postgresService.query<signupQueryInterface>(`
+      const rows = await this.postgresService.query<signupInsertQueryInterface>(`
         INSERT INTO users (visitor_id, email, password_hash, full_name, gender, dob, secret, email_verified, two_factor_enabled, last_login_at)
         SELECT v.id, $1, $2, $3, $4, $5::date, $6, FALSE, FALSE, NOW()
         FROM visitors v
@@ -59,8 +65,8 @@ export class AuthService {
       `, [mail, passwordHash, fullName, sex, dateOfBirth, secret, anonymous_id]);
 
       if (!rows?.length) {
-        this.loggerService.error('Visitor not found', HttpStatus.NOT_FOUND);
-        throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
+        this.loggerService.error('User already exists', HttpStatus.NOT_FOUND);
+        throw new HttpException('User already exists', HttpStatus.NOT_FOUND);
       }
 
       const { id, full_name, email, gender, dob, two_factor_enabled, created_at, email_verified } = rows[0];
@@ -70,6 +76,24 @@ export class AuthService {
         { sub: id, email, type: 'refresh' },
         { expiresIn: refreshExpiresIn }
       );
+      const refreshTokenHash = createHash('sha256').update(refreshToken).digest('hex');
+      const updated = await this.postgresService.query<signupUpdateQueryInterface>(`
+        UPDATE users SET refresh_token_hash = $1 WHERE id = $2 RETURNING id
+      `, [refreshTokenHash, id]);
+      if (!updated?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const sessionPayload = {
+        dob,
+        email,
+        gender,
+        full_name,
+        created_at,
+        two_factor_enabled,
+        access_token: accessToken,
+      };
+      await this.redisService.set(`user:${email.trim().toLowerCase()}`, JSON.stringify(sessionPayload));
       const expiresInMinutes =
         Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES')) || 15;
       await this.emailService.sendOtpVerificationEmail({
@@ -78,7 +102,6 @@ export class AuthService {
         otp,
         expiresInMinutes,
       });
-      return { dob, email, gender, full_name, created_at, two_factor_enabled, access_token: accessToken, refresh_token: refreshToken };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -104,7 +127,7 @@ export class AuthService {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
-      await this.postgresService.query(`
+      await this.postgresService.query<void>(`
         UPDATE users u
         SET 
           visitor_id = v.id,
@@ -120,7 +143,71 @@ export class AuthService {
         { sub: id, email: userEmail, type: 'refresh' },
         { expiresIn: refreshExpiresIn }
       );
+      const refreshTokenHash = createHash('sha256').update(refreshToken).digest('hex');
+      await this.postgresService.query<void>(`
+        UPDATE users SET refresh_token_hash = $1 WHERE id = $2
+      `, [refreshTokenHash, id]);
       return { dob, email, gender, full_name, created_at, two_factor_enabled, access_token: accessToken, refresh_token: refreshToken };
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async refresh(payload: RefreshDto): Promise<refreshTokenResultInterface> {
+    try {
+      this.loggerService.log('refresh {controller}');
+      const { refresh_token } = payload;
+
+      const publicKey: string = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
+      const decoded = (await this.jwtService
+        .verifyAsync(refresh_token, {
+          publicKey,
+          algorithms: ['RS256'],
+        })
+        .catch(() => {
+          this.loggerService.error('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+          throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+        })) as { sub?: number; email?: string; type?: string };
+
+      if (decoded?.type !== 'refresh' || !decoded?.sub || !decoded?.email) {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+
+      const rows = await this.postgresService.query<refreshTokenQueryInterface>(`
+        SELECT id, email, email_verified, refresh_token_hash FROM users WHERE id = $1 AND email = $2 LIMIT 1
+      `, [decoded.sub, decoded.email]);
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
+      }
+
+      const { id, email, email_verified, refresh_token_hash } = rows[0];
+      const incomingHash = createHash('sha256').update(refresh_token).digest('hex');
+      if (!refresh_token_hash || refresh_token_hash !== incomingHash) {
+        this.loggerService.error('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
+      }
+
+      const accessToken = await this.jwtService.signAsync({
+        sub: id,
+        email,
+        type: 'access',
+        email_verified: email_verified,
+      });
+
+      const refreshExpiresIn = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
+      const newRefreshToken = await this.jwtService.signAsync(
+        { sub: id, email: email, type: 'refresh' },
+        { expiresIn: refreshExpiresIn },
+      );
+      const newRefreshHash = createHash('sha256').update(newRefreshToken).digest('hex');
+      await this.postgresService.query<void>(`
+        UPDATE users SET refresh_token_hash = $1 WHERE id = $2
+      `, [newRefreshHash, id]);
+
+      return { access_token: accessToken };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -144,11 +231,49 @@ export class AuthService {
         throw new HttpException('Invalid or expired code', HttpStatus.BAD_REQUEST);
       }
       if (!email_verified) {
-        await this.postgresService.query(`
+        await this.postgresService.query<void>(`
           UPDATE users SET email_verified = TRUE WHERE email = $1
         `, [mail]);
       }
       return { verified: true };
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async resendLink(payload: ResendLinkDto): Promise<void> {
+    try {
+      this.loggerService.log('resendLink {controller}');
+      const { email } = payload;
+      const rows = await this.postgresService.query<resendLinkGetQueryInterface>(`
+        SELECT full_name, email_verified FROM users WHERE email = $1
+      `, [email]);
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const { full_name, email_verified } = rows[0];
+      if (email_verified) {
+        this.loggerService.error('Email already verified', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Email already verified', HttpStatus.BAD_REQUEST);
+      }
+      const [otp, secret] = this.generateOtp();
+      const updated = await this.postgresService.query<resendLinkUpdateQueryInterface>(`
+        UPDATE users SET secret = $1 WHERE email = $2 RETURNING id
+      `, [secret, email]);
+      if (!updated?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const expiresInMinutes =
+        Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES')) || 15;
+      await this.emailService.sendOtpVerificationEmail({
+        email: email,
+        name: full_name,
+        otp,
+        expiresInMinutes,
+      });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -309,6 +434,24 @@ export class AuthService {
         this.loggerService.error('Email not verified', HttpStatus.FORBIDDEN);
         throw new HttpException('Email not verified', HttpStatus.FORBIDDEN);
       }
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async me(query: MeQueryDto): Promise<MeResult> {
+    try {
+      this.loggerService.log('me {controller}');
+      const redisKey = `user:${query.email.trim().toLowerCase()}`;
+      const raw = await this.redisService.get(redisKey);
+      if (!raw) {
+        this.loggerService.error('Session not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('Session not found', HttpStatus.NOT_FOUND);
+      }
+      const session: MeResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      await this.redisService.del(redisKey);
+      return session;
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

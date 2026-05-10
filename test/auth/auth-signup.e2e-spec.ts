@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { createHash } from 'crypto';
 import { App } from 'supertest/types';
 import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
@@ -19,10 +20,11 @@ import { hash } from 'bcrypt';
 describe('AuthController (e2e) - POST /auth/signup', () => {
   let app: INestApplication<App>;
 
+  const redisSetMock = jest.fn();
+  const configGetMock = jest.fn();
+  const jwtSignAsyncMock = jest.fn();
   const postgresQueryMock = jest.fn();
   const sendOtpVerificationEmailMock = jest.fn();
-  const jwtSignAsyncMock = jest.fn();
-  const configGetMock = jest.fn();
 
   const validPayload = {
     anonymous_id: 'anon_123',
@@ -33,20 +35,32 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
     dob: '2000-01-01',
   };
 
+  const userRow = {
+    id: 1,
+    full_name: 'Muhammad Hashir',
+    email: 'muhammad@example.com',
+    gender: 'male',
+    dob: '2000-01-01',
+    two_factor_enabled: false,
+    created_at: new Date('2026-01-01T00:00:00.000Z'),
+    email_verified: false,
+  };
+
   beforeEach(async () => {
+    redisSetMock.mockReset();
+    configGetMock.mockReset();
+    jwtSignAsyncMock.mockReset();
     postgresQueryMock.mockReset();
     sendOtpVerificationEmailMock.mockReset();
-    jwtSignAsyncMock.mockReset();
-    configGetMock.mockReset();
     (hash as unknown as jest.Mock).mockReset();
     (hash as unknown as jest.Mock).mockResolvedValue('hashed-password');
 
     configGetMock.mockImplementation((key: string) => {
       const table: Record<string, any> = {
         PASSWORD_PEPPER: 'pepper',
-        REFRESH_TOKEN_EXPIRATION_TIME: '7d',
         OTP_EXPIRES_IN_MINUTES: '15',
         ACCESS_TOKEN_EXPIRATION_TIME: '1h',
+        REFRESH_TOKEN_EXPIRATION_TIME: '7d',
         JWT_PUBLIC_KEY: 'test-public',
         JWT_PRIVATE_KEY: 'test-private',
       };
@@ -63,7 +77,7 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
       })
       .overrideProvider(RedisService)
       .useValue({
-        set: jest.fn(),
+        set: redisSetMock,
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
@@ -109,7 +123,7 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
   });
 
   it('-> 400 when anonymous_id missing', async () => {
-    const { anonymous_id, ...rest } = validPayload;
+    const { anonymous_id: _omit, ...rest } = validPayload;
 
     await request(app.getHttpServer())
       .post('/auth/signup')
@@ -120,7 +134,7 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
   });
 
   it('-> 400 when full_name missing', async () => {
-    const { full_name, ...rest } = validPayload;
+    const { full_name: _omit, ...rest } = validPayload;
 
     await request(app.getHttpServer())
       .post('/auth/signup')
@@ -183,8 +197,9 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
       .send({ ...validPayload, anonymous_id: 'missing_visitor' })
       .expect(404);
 
-    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
   });
 
   it('-> 404 when insert hits ON CONFLICT (no rows returned)', async () => {
@@ -196,6 +211,7 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
       .expect(404);
 
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+    expect(redisSetMock).not.toHaveBeenCalled();
   });
 
   it('-> 500 mapped (not unhandled) when bcrypt.hash throws', async () => {
@@ -220,20 +236,76 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('-> 500 mapped when jwt sign throws', async () => {
-    postgresQueryMock.mockResolvedValueOnce([
-      {
-        id: 1,
-        full_name: 'Muhammad Hashir',
-        email: 'muhammad@example.com',
-        gender: 'male',
-        dob: '2000-01-01',
-        two_factor_enabled: false,
-        created_at: new Date('2026-01-01T00:00:00.000Z'),
-        email_verified: false,
-      },
-    ]);
+  it('-> 500 mapped when jwt access sign throws', async () => {
+    postgresQueryMock.mockResolvedValueOnce([userRow]);
     jwtSignAsyncMock.mockRejectedValueOnce(new Error('jwt boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(validPayload)
+      .expect(500);
+
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when jwt refresh sign throws', async () => {
+    postgresQueryMock.mockResolvedValueOnce([userRow]);
+    jwtSignAsyncMock
+      .mockResolvedValueOnce('access-token')
+      .mockRejectedValueOnce(new Error('jwt boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(validPayload)
+      .expect(500);
+
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when refresh-token-hash UPDATE throws', async () => {
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
+      .mockRejectedValueOnce(new Error('db down'));
+    jwtSignAsyncMock
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(validPayload)
+      .expect(500);
+
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 404 when refresh-token-hash UPDATE returns no rows', async () => {
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
+      .mockResolvedValueOnce([]);
+    jwtSignAsyncMock
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+
+    await request(app.getHttpServer())
+      .post('/auth/signup')
+      .send(validPayload)
+      .expect(404);
+
+    expect(redisSetMock).not.toHaveBeenCalled();
+    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when redis.set throws', async () => {
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
+      .mockResolvedValueOnce([{ id: userRow.id }]);
+    jwtSignAsyncMock
+      .mockResolvedValueOnce('access-token')
+      .mockResolvedValueOnce('refresh-token');
+    redisSetMock.mockRejectedValueOnce(new Error('redis boom'));
 
     await request(app.getHttpServer())
       .post('/auth/signup')
@@ -244,21 +316,13 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
   });
 
   it('-> 500 mapped when email send throws', async () => {
-    postgresQueryMock.mockResolvedValueOnce([
-      {
-        id: 1,
-        full_name: 'Muhammad Hashir',
-        email: 'muhammad@example.com',
-        gender: 'male',
-        dob: '2000-01-01',
-        two_factor_enabled: false,
-        created_at: new Date('2026-01-01T00:00:00.000Z'),
-        email_verified: false,
-      },
-    ]);
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
+      .mockResolvedValueOnce([{ id: userRow.id }]);
     jwtSignAsyncMock
       .mockResolvedValueOnce('access-token')
       .mockResolvedValueOnce('refresh-token');
+    redisSetMock.mockResolvedValueOnce(undefined);
     sendOtpVerificationEmailMock.mockRejectedValueOnce(new Error('smtp boom'));
 
     await request(app.getHttpServer())
@@ -267,56 +331,64 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
       .expect(500);
   });
 
-  it('-> 201 and returns tokens on happy path', async () => {
-    const createdAt = new Date('2026-01-01T00:00:00.000Z');
-
-    postgresQueryMock.mockResolvedValueOnce([
-      {
-        id: 1,
-        full_name: 'Muhammad Hashir',
-        email: 'muhammad@example.com',
-        gender: 'male',
-        dob: '2000-01-01',
-        two_factor_enabled: false,
-        created_at: createdAt,
-        email_verified: false,
-      },
-    ]);
-
+  it('-> 204 with empty body, stores refresh-token hash in Postgres and access in Redis on happy path', async () => {
+    postgresQueryMock
+      .mockResolvedValueOnce([userRow])
+      .mockResolvedValueOnce([{ id: userRow.id }]);
     jwtSignAsyncMock
       .mockResolvedValueOnce('access-token')
       .mockResolvedValueOnce('refresh-token');
-
+    redisSetMock.mockResolvedValue(undefined);
     sendOtpVerificationEmailMock.mockResolvedValue(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/signup')
       .send(validPayload)
-      .expect(201)
-      .expect((res) => {
-        expect(res.body).toEqual({
-          dob: '2000-01-01',
-          email: 'muhammad@example.com',
-          gender: 'male',
-          full_name: 'Muhammad Hashir',
-          created_at: createdAt.toISOString(),
-          two_factor_enabled: false,
-          access_token: 'access-token',
-          refresh_token: 'refresh-token',
-        });
-      });
+      .expect(204)
+      .expect('');
 
     expect(hash as unknown as jest.Mock).toHaveBeenCalledWith(
       'password123' + 'pepper',
       12,
     );
-    expect(postgresQueryMock).toHaveBeenCalledTimes(1);
+
     expect(jwtSignAsyncMock).toHaveBeenCalledTimes(2);
+    expect(jwtSignAsyncMock).toHaveBeenNthCalledWith(1, {
+      sub: userRow.id,
+      email: userRow.email,
+      type: 'access',
+      email_verified: userRow.email_verified,
+    });
+    expect(jwtSignAsyncMock).toHaveBeenNthCalledWith(
+      2,
+      { sub: userRow.id, email: userRow.email, type: 'refresh' },
+      { expiresIn: '7d' },
+    );
+
+    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+    const expectedHash = createHash('sha256').update('refresh-token').digest('hex');
+    const updateCall = postgresQueryMock.mock.calls[1];
+    expect(updateCall[0]).toMatch(/UPDATE users SET refresh_token_hash/);
+    expect(updateCall[1]).toEqual([expectedHash, userRow.id]);
+
+    expect(redisSetMock).toHaveBeenCalledTimes(1);
+    const [redisKey, redisValue] = redisSetMock.mock.calls[0];
+    expect(redisKey).toBe(`user:${userRow.email.toLowerCase()}`);
+    expect(JSON.parse(redisValue)).toEqual({
+      dob: userRow.dob,
+      email: userRow.email,
+      gender: userRow.gender,
+      full_name: userRow.full_name,
+      created_at: userRow.created_at.toISOString(),
+      two_factor_enabled: userRow.two_factor_enabled,
+      access_token: 'access-token',
+    });
+
     expect(sendOtpVerificationEmailMock).toHaveBeenCalledTimes(1);
     expect(sendOtpVerificationEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        email: 'muhammad@example.com',
-        name: 'Muhammad Hashir',
+        email: userRow.email,
+        name: userRow.full_name,
         otp: expect.any(String),
         expiresInMinutes: 15,
       }),
