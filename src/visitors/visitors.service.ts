@@ -7,7 +7,6 @@ import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { VisitorEmailsQueryInterface } from './interface/VisitorEmails.interface';
 import { VisitorMessagesQueryInterface } from './interface/VisitorMessages.interface';
-import { LookupGeoForIpBody, LookupGeoForIpResult } from './interface/LookupGeoForIp.interface';
 
 @Injectable()
 export class VisitorService {
@@ -20,25 +19,22 @@ export class VisitorService {
   
   // controller functions
 
-  async trackVisitor(payload: TrackVisitorsDto, ip: string): Promise<void> {
+  async trackVisitor(payload: TrackVisitorsDto): Promise<void> {
     try {
       this.loggerService.log('trackVisitor {controller}');
-      const { timezone, anonymous_id, device_type } = payload;
-      const clientIp = this.normalizeClientIp(ip);
-      const { city, country } = await this.lookupGeoForIp({ ip: clientIp, timezone });
+      const { timezone, anonymous_id, device_type, clicks, navigations } = payload;
       await this.postgresService.query<void>(`
-        INSERT INTO visitors (anonymous_id, ip, city, country, timezone, device_type)
-        VALUES ($1, $2::inet, $3, $4, $5, $6)
+        INSERT INTO visitors (anonymous_id, timezone, device_type, clicks, navigations)
+        VALUES ($1, $2, $3, COALESCE($4, 0), COALESCE($5, 0))
         ON CONFLICT (anonymous_id)
         DO UPDATE SET
-          ip = EXCLUDED.ip,
-          city = EXCLUDED.city,
-          country = EXCLUDED.country,
           timezone = EXCLUDED.timezone,
           device_type = EXCLUDED.device_type,
+          clicks = visitors.clicks + COALESCE(EXCLUDED.clicks, 0),
+          navigations = visitors.navigations + COALESCE(EXCLUDED.navigations, 0),
           number_of_visits = visitors.number_of_visits + 1,
           last_visited = NOW()
-      `, [anonymous_id, clientIp, city, country, timezone, device_type]);
+      `, [anonymous_id, timezone, device_type, clicks, navigations]);
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -96,23 +92,5 @@ export class VisitorService {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
-  }
-
-  // helper functions
-  
-  private async lookupGeoForIp(body: LookupGeoForIpBody): Promise<LookupGeoForIpResult> {
-    this.loggerService.log('lookupGeoForIp {helper}');
-    const url = `http://ip-api.com/json/${encodeURIComponent(body.ip)}`;
-    const response = await fetch(url);
-    const data = await response.json();
-    return {
-      city: data.city,
-      country: data.country
-    };
-  }
-
-  private normalizeClientIp(ip: string): string {
-    this.loggerService.log('normalizeClientIp {helper}');
-    return ip === '::1' ? '127.0.0.1' : ip.replace(/^::ffff:/i, '');
   }
 }

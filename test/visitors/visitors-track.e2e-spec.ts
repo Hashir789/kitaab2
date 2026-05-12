@@ -39,9 +39,6 @@ describe('VisitorsController (e2e) - POST /visitors/track', () => {
   });
 
   it('POST /visitors/track -> 204 (no auth required)', async () => {
-    jest.spyOn(globalThis as any, 'fetch').mockResolvedValue({
-      json: async () => ({ city: 'Karachi', country: 'Pakistan' }),
-    } as any);
     postgresQueryMock.mockResolvedValue([]);
 
     await request(app.getHttpServer())
@@ -50,24 +47,20 @@ describe('VisitorsController (e2e) - POST /visitors/track', () => {
         timezone: 'Asia/Karachi',
         anonymous_id: 'anon_123',
         device_type: 'desktop',
+        clicks: 5,
+        navigations: 3,
       })
       .expect(204)
       .expect('');
-
-    expect((globalThis as any).fetch).toHaveBeenCalledTimes(1);
-    expect((globalThis as any).fetch.mock.calls[0][0]).toContain(
-      encodeURIComponent('127.0.0.1'),
-    );
 
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
     const params = postgresQueryMock.mock.calls[0][1];
     expect(params).toEqual([
       'anon_123',
-      '127.0.0.1',
-      'Karachi',
-      'Pakistan',
       'Asia/Karachi',
       'desktop',
+      5,
+      3,
     ]);
   });
 

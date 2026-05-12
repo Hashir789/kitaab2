@@ -1,4 +1,4 @@
-import { IsIn, IsNotEmpty, IsString } from 'class-validator';
+import { IsIn, IsNotEmpty, IsString, Min, IsInt, IsOptional } from 'class-validator';
 
 export class TrackVisitorsDto {
   @IsString()
@@ -12,4 +12,14 @@ export class TrackVisitorsDto {
   @IsString()
   @IsIn(['desktop', 'tablet', 'mobile'])
   device_type: 'desktop' | 'tablet' | 'mobile';
+
+  @Min(0)
+  @IsInt()
+  @IsOptional()
+  clicks?: number;
+
+  @Min(0)
+  @IsInt()
+  @IsOptional()
+  navigations?: number;
 }

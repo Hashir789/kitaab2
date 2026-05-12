@@ -11,8 +11,8 @@ export class VisitorsController {
 
   @Post('track')
   @HttpCode(HttpStatus.NO_CONTENT)
-  trackVisitor(@Body() body: TrackVisitorsDto, @Ip() ip: string) {
-    return this.visitorService.trackVisitor(body, ip);
+  trackVisitor(@Body() body: TrackVisitorsDto) {
+    return this.visitorService.trackVisitor(body);
   }
 
   @Post('message')
