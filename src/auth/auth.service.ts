@@ -2,36 +2,17 @@ import { StringValue } from 'ms';
 import { hash, compare } from 'bcrypt';
 import * as speakeasy from 'speakeasy';
 import { JwtService } from '@nestjs/jwt';
-import { MeQueryDto } from './dto/me.dto';
-import { LoginDto } from './dto/login.dto';
-import { SignupDto } from './dto/signup.dto';
 import { ConfigService } from '@nestjs/config';
-import { RefreshDto } from './dto/refresh.dto';
 import { createHash, randomBytes } from 'crypto';
 import { Logger } from '../logger/logger.service';
-import { OtpVerifyDto } from './dto/otpVerify.dto';
-import { update2faDto } from './dto/update2fa.dto';
-import { MeResult } from './interface/me.interface';
-import { ResendLinkDto } from './dto/resendLink.dto';
 import { EmailService } from '../email/email.service';
-import { AuthenticatedRequest } from './auth.interface';
-import { ResetPasswordDto } from './dto/reset-password.dto';
-import { ForgotPasswordDto } from './dto/forgotPassword.dto';
-import { ChangePasswordDto } from './dto/changePassword.dto';
+import { CryptoService } from '../crypto/crypto.service';
+import type { AuthenticatedRequest } from './auth.interface';
 import { RedisService } from '../database/redis/redis.service';
-import { verifyOtpResult } from './interface/verifyOtp.interface';
-import { signupInsertQueryInterface, signupUpdateQueryInterface } from './interface/signup.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { loginQueryInterface, loginResult } from './interface/login.interface';
-import { ResetPasswordQueryInterface } from './interface/resetPassword.interface';
-import { ForgotPasswordQueryInterface } from './interface/forgotPassword.interface';
-import { ChangePasswordQueryInterface } from './interface/changePassword.interface';
-import { otpVerifyQueryInterface, otpVerifyResult } from './interface/otpVerify.interface';
-import { EmailVerifyQueryInterface, EmailVerifyResult } from './interface/emailVerify.interface';
-import { refreshTokenQueryInterface, refreshTokenResultInterface } from './interface/refresh.interface';
-import { Update2FaGetQueryInterface, Update2FaPatchQueryInterface } from './interface/update2fa.interface';
-import { resendLinkGetQueryInterface, resendLinkUpdateQueryInterface } from './interface/resendLink.interface';
+import { ChangePasswordDto, ForgotPasswordDto, LoginDto, MeQueryDto, OtpVerifyDto, RefreshDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
+import { verifyOtpResult, loginQueryInterface, loginResult, ResetPasswordQueryInterface, ForgotPasswordQueryInterface, ChangePasswordQueryInterface, otpVerifyQueryInterface, otpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, signupUpdateQueryInterface, refreshTokenQueryInterface, refreshTokenResultInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface, resendLinkUpdateQueryInterface, MeResult } from './auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -42,6 +23,7 @@ export class AuthService {
     private readonly emailService: EmailService,
     private readonly redisService: RedisService,
     private readonly configService: ConfigService,
+    private readonly CryptoService: CryptoService,
     private readonly postgresService: PostgresService
   ) {}
 
@@ -50,58 +32,44 @@ export class AuthService {
   async signup(payload: SignupDto): Promise<void> {
     try {
       this.loggerService.log('signup {controller}');
-      const { anonymous_id, full_name: fullName, email: mail, password, gender: sex, dob: dateOfBirth } = payload;
+      const { anonymous_id, full_name, email, password, gender, dob, recovery_key } = payload;
       const pepper = this.configService.get<string>('PASSWORD_PEPPER');
       const passwordHash = await hash(password + pepper, 12);
       const [otp, secret] = this.generateOtp();
+      const encrypted = await this.CryptoService.prepareSignupStorage({ password, fields: { full_name, email, secret }, recovery_key });
+      const { email: email_encrypted, full_name: full_name_encrypted, secret: secret_encrypted, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key } = encrypted;
       const rows = await this.postgresService.query<signupInsertQueryInterface>(`
-        INSERT INTO users (visitor_id, email, password_hash, full_name, gender, dob, secret, email_verified, two_factor_enabled, last_login_at)
-        SELECT v.id, $1, $2, $3, $4, $5::date, $6, FALSE, FALSE, NOW()
+        INSERT INTO users (visitor_id, email, password_hash, full_name, gender, dob, secret, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key, email_verified, two_factor_enabled, last_login_at)
+        SELECT v.id, $1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, $12, FALSE, FALSE, NOW()
         FROM visitors v
-        WHERE v.anonymous_id = $7
+        WHERE v.anonymous_id = $13
         ON CONFLICT (email)
         DO NOTHING
-        RETURNING *;
-      `, [mail, passwordHash, fullName, sex, dateOfBirth, secret, anonymous_id]);
-
+        RETURNING id, email_verified, two_factor_enabled, created_at;
+      `, [ email_encrypted, passwordHash, full_name_encrypted, gender, dob, secret_encrypted, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key, anonymous_id ]);
       if (!rows?.length) {
         this.loggerService.error('User already exists', HttpStatus.NOT_FOUND);
         throw new HttpException('User already exists', HttpStatus.NOT_FOUND);
       }
-
-      const { id, full_name, email, gender, dob, two_factor_enabled, created_at, email_verified } = rows[0];
-      const accessToken = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified });
-      const refreshExpiresIn = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
-      const refreshToken = await this.jwtService.signAsync(
+      const { id, email_verified, two_factor_enabled, created_at  } = rows[0];
+      const access_token = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified });
+      const refresh_expires_in = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
+      const refresh_token = await this.jwtService.signAsync(
         { sub: id, email, type: 'refresh' },
-        { expiresIn: refreshExpiresIn }
+        { expiresIn: refresh_expires_in }
       );
-      const refreshTokenHash = createHash('sha256').update(refreshToken).digest('hex');
+      const refresh_token_hash = createHash('sha256').update(refresh_token).digest('hex');
       const updated = await this.postgresService.query<signupUpdateQueryInterface>(`
         UPDATE users SET refresh_token_hash = $1 WHERE id = $2 RETURNING id
-      `, [refreshTokenHash, id]);
+      `, [refresh_token_hash, id]);
       if (!updated?.length) {
         this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      const sessionPayload = {
-        dob,
-        email,
-        gender,
-        full_name,
-        created_at,
-        two_factor_enabled,
-        access_token: accessToken,
-      };
-      await this.redisService.set(`user:${email.trim().toLowerCase()}`, JSON.stringify(sessionPayload));
-      const expiresInMinutes =
-        Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES')) || 15;
-      await this.emailService.sendOtpVerificationEmail({
-        email,
-        name: full_name,
-        otp,
-        expiresInMinutes,
-      });
+      const session_payload = { dob, email, gender, full_name, created_at, two_factor_enabled, access_token: access_token };
+      await this.redisService.set(`user:${email}`, JSON.stringify(session_payload));
+      const expires_in_minutes = Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES'));
+      await this.emailService.sendOtpVerificationEmail({ email, full_name, otp, expires_in_minutes });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -122,8 +90,8 @@ export class AuthService {
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
       const { id, email: userEmail, password_hash, dob, email, gender, full_name, created_at, two_factor_enabled, email_verified } = rows[0];
-      const hashPassword = await compare(password + pepper, password_hash);
-      if (!hashPassword) {
+      const hash_password = await compare(password + pepper, password_hash);
+      if (!hash_password) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
@@ -137,17 +105,17 @@ export class AuthService {
           u.id = $1
           AND v.anonymous_id = $2
       `, [id, anonymous_id]);
-      const accessToken = await this.jwtService.signAsync({ sub: id, email: userEmail, type: 'access', email_verified });
-      const refreshExpiresIn = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
-      const refreshToken = await this.jwtService.signAsync(
+      const access_token = await this.jwtService.signAsync({ sub: id, email: userEmail, type: 'access', email_verified });
+      const refresh_expires_in = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
+      const refresh_token = await this.jwtService.signAsync(
         { sub: id, email: userEmail, type: 'refresh' },
-        { expiresIn: refreshExpiresIn }
+        { expiresIn: refresh_expires_in }
       );
-      const refreshTokenHash = createHash('sha256').update(refreshToken).digest('hex');
+      const refresh_token_hash = createHash('sha256').update(refresh_token).digest('hex');
       await this.postgresService.query<void>(`
         UPDATE users SET refresh_token_hash = $1 WHERE id = $2
-      `, [refreshTokenHash, id]);
-      return { dob, email, gender, full_name, created_at, two_factor_enabled, access_token: accessToken, refresh_token: refreshToken };
+      `, [refresh_token_hash, id]);
+      return { dob, email, gender, full_name, created_at, two_factor_enabled, access_token, refresh_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -159,22 +127,20 @@ export class AuthService {
       this.loggerService.log('refresh {controller}');
       const { refresh_token } = payload;
 
-      const publicKey: string = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
+      const public_key: string = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
       const decoded = (await this.jwtService
         .verifyAsync(refresh_token, {
-          publicKey,
+          publicKey: public_key,
           algorithms: ['RS256'],
         })
         .catch(() => {
           this.loggerService.error('Invalid or expired token', HttpStatus.UNAUTHORIZED);
           throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
         })) as { sub?: number; email?: string; type?: string };
-
       if (decoded?.type !== 'refresh' || !decoded?.sub || !decoded?.email) {
         this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
       }
-
       const rows = await this.postgresService.query<refreshTokenQueryInterface>(`
         SELECT id, email, email_verified, refresh_token_hash FROM users WHERE id = $1 AND email = $2 LIMIT 1
       `, [decoded.sub, decoded.email]);
@@ -182,32 +148,29 @@ export class AuthService {
         this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
         throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
       }
-
       const { id, email, email_verified, refresh_token_hash } = rows[0];
-      const incomingHash = createHash('sha256').update(refresh_token).digest('hex');
-      if (!refresh_token_hash || refresh_token_hash !== incomingHash) {
+      const incoming_hash = createHash('sha256').update(refresh_token).digest('hex');
+      if (!refresh_token_hash || refresh_token_hash !== incoming_hash) {
         this.loggerService.error('Invalid or expired token', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
       }
-
-      const accessToken = await this.jwtService.signAsync({
+      const access_token = await this.jwtService.signAsync({
         sub: id,
         email,
         type: 'access',
-        email_verified: email_verified,
+        email_verified
       });
 
-      const refreshExpiresIn = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
-      const newRefreshToken = await this.jwtService.signAsync(
+      const refresh_expires_in = (this.configService.get<string>('REFRESH_TOKEN_EXPIRATION_TIME')) as StringValue;
+      const new_refresh_token = await this.jwtService.signAsync(
         { sub: id, email: email, type: 'refresh' },
-        { expiresIn: refreshExpiresIn },
+        { expiresIn: refresh_expires_in },
       );
-      const newRefreshHash = createHash('sha256').update(newRefreshToken).digest('hex');
+      const new_refresh_hash = createHash('sha256').update(new_refresh_token).digest('hex');
       await this.postgresService.query<void>(`
         UPDATE users SET refresh_token_hash = $1 WHERE id = $2
-      `, [newRefreshHash, id]);
-
-      return { access_token: accessToken };
+      `, [new_refresh_hash, id]);
+      return { access_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -217,10 +180,10 @@ export class AuthService {
   async otpVerify(payload: OtpVerifyDto): Promise<otpVerifyResult> {
     try {
       this.loggerService.log('otpVerify {controller}');
-      const { email: mail, otp } = payload;
+      const { email, otp } = payload;
       const rows = await this.postgresService.query<otpVerifyQueryInterface>(`
         SELECT secret, email_verified FROM users WHERE email = $1
-      `, [mail]);
+      `, [email]);
       if (!rows?.length) {
         this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
@@ -233,7 +196,7 @@ export class AuthService {
       if (!email_verified) {
         await this.postgresService.query<void>(`
           UPDATE users SET email_verified = TRUE WHERE email = $1
-        `, [mail]);
+        `, [email]);
       }
       return { verified: true };
     } catch (error) {
@@ -266,14 +229,8 @@ export class AuthService {
         this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      const expiresInMinutes =
-        Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES')) || 15;
-      await this.emailService.sendOtpVerificationEmail({
-        email: email,
-        name: full_name,
-        otp,
-        expiresInMinutes,
-      });
+      const expires_in_minutes = Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES'));
+      await this.emailService.sendOtpVerificationEmail({ otp, email, full_name, expires_in_minutes });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -283,10 +240,10 @@ export class AuthService {
   async forgotPassword(payload: ForgotPasswordDto): Promise<void> {
     try {
       this.loggerService.log('forgotPassword {controller}');
-      const { email: mail } = payload;
+      const { email } = payload;
       const rows = await this.postgresService.query<ForgotPasswordQueryInterface>(
         `SELECT id, full_name FROM users WHERE email = $1`,
-        [mail],
+        [email],
       );
       if (!rows?.length) {
         this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
@@ -294,18 +251,17 @@ export class AuthService {
       }
       const { id, full_name } = rows[0];
       const token = randomBytes(32).toString('hex');
-      const ttlSeconds =
-        Number(this.configService.get<string>('PASSWORD_RESET_EXPIRES_IN_SECONDS')) || 3600;
-      await this.redisService.set(`password-reset:${token}`, String(id), ttlSeconds);
-      const baseUrl = this.configService.get<string>('PASSWORD_RESET_URL_BASE')?.replace(/\/$/, '');
-      const resetLink = baseUrl ? `${baseUrl}?token=${encodeURIComponent(token)}` : null;
-      const expiresInMinutes = Math.max(1, Math.ceil(ttlSeconds / 60));
+      const ttl_seconds = Number(this.configService.get<string>('PASSWORD_RESET_EXPIRES_IN_SECONDS')) || 3600;
+      await this.redisService.set(`password-reset:${token}`, String(id), ttl_seconds);
+      const base_url = this.configService.get<string>('PASSWORD_RESET_URL_BASE')?.replace(/\/$/, '');
+      const reset_link = base_url ? `${base_url}?token=${encodeURIComponent(token)}` : null;
+      const expires_in_minutes = Math.max(1, Math.ceil(ttl_seconds / 60));
       await this.emailService.sendPasswordResetEmail({
-        email: mail,
-        name: full_name,
-        resetLink,
-        plainToken: resetLink ? undefined : token,
-        expiresInMinutes
+        email,
+        full_name,
+        reset_link,
+        expires_in_minutes,
+        plain_token: reset_link ? undefined : token,
       });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -318,25 +274,23 @@ export class AuthService {
       this.loggerService.log('resetPassword {controller}');
       const { token, new_password } = payload;
       const key = `password-reset:${token}`;
-      const userId = await this.redisService.get(key);
-      if (!userId) {
+      const user_id = await this.redisService.get(key);
+      if (!user_id) {
         this.loggerService.error('Invalid or expired token', HttpStatus.BAD_REQUEST);
         throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
       }
-
       const pepper = this.configService.get<string>('PASSWORD_PEPPER') ?? '';
-      const passwordHash = await hash(new_password + pepper, 12);
+      const password_hash = await hash(new_password + pepper, 12);
       const updated = await this.postgresService.query<ResetPasswordQueryInterface>(`
         UPDATE users
         SET password_hash = $1
         WHERE id = $2
         RETURNING id
-      `, [passwordHash, userId]);
+      `, [password_hash, user_id]);
       if (!updated?.length) {
         this.loggerService.error('Invalid or expired token', HttpStatus.BAD_REQUEST);
         throw new HttpException('Invalid or expired token', HttpStatus.BAD_REQUEST);
       }
-
       await this.redisService.del(key);
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -371,13 +325,13 @@ export class AuthService {
         this.loggerService.error('Invalid current password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid current password', HttpStatus.UNAUTHORIZED);
       }
-      const newPasswordHash = await hash(new_password + pepper, 12);
+      const new_password_hash = await hash(new_password + pepper, 12);
       const updated = await this.postgresService.query<ChangePasswordQueryInterface>(`
         UPDATE users
         SET password_hash = $1
         WHERE id = $2 AND email = $3
         RETURNING id
-      `, [newPasswordHash, user_id, email]);
+      `, [new_password_hash, user_id, email]);
       if (!updated?.length) {
         this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
         throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
@@ -443,14 +397,14 @@ export class AuthService {
   async me(query: MeQueryDto): Promise<MeResult> {
     try {
       this.loggerService.log('me {controller}');
-      const redisKey = `user:${query.email.trim().toLowerCase()}`;
-      const raw = await this.redisService.get(redisKey);
+      const redis_key = `user:${query.email.trim().toLowerCase()}`;
+      const raw = await this.redisService.get(redis_key);
       if (!raw) {
         this.loggerService.error('Session not found', HttpStatus.NOT_FOUND);
         throw new HttpException('Session not found', HttpStatus.NOT_FOUND);
       }
       const session: MeResult = typeof raw === 'string' ? JSON.parse(raw) : raw;
-      await this.redisService.del(redisKey);
+      await this.redisService.del(redis_key);
       return session;
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -464,25 +418,26 @@ export class AuthService {
     this.loggerService.log('generateOtp {helper}');
     let secret = speakeasy.generateSecret({ length: 20 }).base32;
     let otp = speakeasy.totp({
-      secret: secret,
-      encoding: 'base32',
-      digits: 4,
+      secret,
       step: 60,
-      window: 1
+      digits: 4,
+      window: 1,
+      encoding: 'base32'
     });
     return [otp, secret];
   }
 
   verifyOtp(body: verifyOtpResult): boolean {
     this.loggerService.log('verifyOtp {helper}');
+    const { otp, secret } = body;
     return Boolean(
       speakeasy.totp.verify({
-        secret: body.secret,
-        encoding: 'base32',
-        token: body.otp,
-        digits: 4,
+        secret,
         step: 60,
+        digits: 4,
         window: 1,
+        token: otp,
+        encoding: 'base32'
       }),
     );
   }

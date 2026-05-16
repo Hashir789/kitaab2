@@ -4,9 +4,9 @@ import { AppController } from './app.controller';
 import { AuthModule } from '../auth/auth.module';
 import { LoggerModule } from '../logger/logger.module';
 import { RedisModule } from '../database/redis/redis.module';
+import { VisitorsModule } from '../visitors/visitors.module';
 import { ConfigModule, ConfigModuleOptions } from '@nestjs/config';
 import { PostgresModule } from '../database/postgres/postgres.module';
-import { VisitorsModule } from '../visitors/visitors.module';
 
 @Module({
   imports: [

@@ -1,12 +1,9 @@
 import { Logger } from '../logger/logger.service';
 import { EmailService } from '../email/email.service';
-import { TrackVisitorsDto } from './dto/TrackVisitors.dto';
-import { VisitorEmailsDto } from './dto/VisitorEmails.dto';
-import { VisitorMessagesDto } from './dto/VisitorMessages.dto';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { VisitorEmailsQueryInterface } from './interface/VisitorEmails.interface';
-import { VisitorMessagesQueryInterface } from './interface/VisitorMessages.interface';
+import { TrackVisitorsDto, VisitorEmailsDto, VisitorMessagesDto } from './visitors.dto';
+import { VisitorEmailsQueryInterface, VisitorMessagesQueryInterface } from './visitors.interface';
 
 @Injectable()
 export class VisitorService {

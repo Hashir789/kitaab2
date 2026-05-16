@@ -1,3 +1,11 @@
+export interface VisitorEmailsQueryInterface {
+  id: number;
+  email: string;
+  created_at: Date;
+  timezone: string;
+  visitor_id: number;
+};
+
 export interface VisitorMessagesQueryInterface {
   id: number;
   name: string;

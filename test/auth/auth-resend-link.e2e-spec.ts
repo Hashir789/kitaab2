@@ -146,8 +146,8 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
     expect(sendOtpVerificationEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: validPayload.email,
-        name: 'Muhammad Hashir',
-        expiresInMinutes: 15,
+        full_name: 'Muhammad Hashir',
+        expires_in_minutes: 15,
       }),
     );
     expect(typeof sendOtpVerificationEmailMock.mock.calls[0][0].otp).toBe('string');

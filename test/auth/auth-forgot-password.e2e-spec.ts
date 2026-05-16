@@ -183,10 +183,10 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
     expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'muhammad@example.com',
-        name: 'Muhammad',
-        resetLink: null,
-        plainToken: expect.any(String),
-        expiresInMinutes: 60,
+        full_name: 'Muhammad',
+        reset_link: null,
+        plain_token: expect.any(String),
+        expires_in_minutes: 60,
       }),
     );
   });
@@ -207,12 +207,12 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
     expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: 'hashir@example.com',
-        name: 'Hashir',
-        resetLink: expect.stringMatching(
+        full_name: 'Hashir',
+        reset_link: expect.stringMatching(
           /^https:\/\/app\.example\.com\/reset\?token=[a-f0-9]{64}$/,
         ),
-        plainToken: undefined,
-        expiresInMinutes: 60,
+        plain_token: undefined,
+        expires_in_minutes: 60,
       }),
     );
   });

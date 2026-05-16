@@ -2,7 +2,7 @@ import { Logger } from '../logger/logger.service';
 import { RedisService } from '../database/redis/redis.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { CheckDatabaseConnectionsResponseInterface } from './interface/CheckDatabaseConnections.interface';
+import { CheckDatabaseConnectionsResponseInterface } from './app.interface';
 
 @Injectable()
 export class AppService {

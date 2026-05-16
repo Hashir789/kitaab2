@@ -1,22 +1,8 @@
-import { MeQueryDto } from './dto/me.dto';
-import { LoginDto } from './dto/login.dto';
 import { AuthService } from './auth.service';
-import { SignupDto } from './dto/signup.dto';
-import { RefreshDto } from './dto/refresh.dto';
-import { OtpVerifyDto } from './dto/otpVerify.dto';
-import { update2faDto } from './dto/update2fa.dto';
-import { MeResult } from './interface/me.interface';
-import { ResendLinkDto } from './dto/resendLink.dto';
-import { loginResult } from './interface/login.interface';
-import { EmailVerifyQueryDto } from './dto/emailVerify.dto';
-import { ResetPasswordDto } from './dto/reset-password.dto';
 import type { AuthenticatedRequest } from './auth.interface';
-import { ForgotPasswordDto } from './dto/forgotPassword.dto';
-import { ChangePasswordDto } from './dto/changePassword.dto';
-import { otpVerifyResult } from './interface/otpVerify.interface'; 
-import { EmailVerifyResult } from './interface/emailVerify.interface';
-import { refreshTokenResultInterface } from './interface/refresh.interface';
 import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { loginResult, otpVerifyResult, EmailVerifyResult, refreshTokenResultInterface, MeResult } from './auth.interface';
+import { ChangePasswordDto, EmailVerifyQueryDto, ForgotPasswordDto, LoginDto, MeQueryDto, OtpVerifyDto, RefreshDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
 
 @Controller('auth')
 export class AuthController {

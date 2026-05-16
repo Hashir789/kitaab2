@@ -1,8 +1,6 @@
 import { VisitorService } from './visitors.service';
-import { TrackVisitorsDto } from './dto/TrackVisitors.dto';
-import { VisitorEmailsDto } from './dto/VisitorEmails.dto';
-import { VisitorMessagesDto } from './dto/VisitorMessages.dto';
-import { Body, Controller, HttpCode, HttpStatus, Ip, Post } from '@nestjs/common';
+import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { TrackVisitorsDto, VisitorEmailsDto, VisitorMessagesDto } from './visitors.dto';
 
 @Controller('visitors')
 export class VisitorsController {

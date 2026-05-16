@@ -388,9 +388,9 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
     expect(sendOtpVerificationEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: userRow.email,
-        name: userRow.full_name,
+        full_name: userRow.full_name,
         otp: expect.any(String),
-        expiresInMinutes: 15,
+        expires_in_minutes: 15,
       }),
     );
   });
