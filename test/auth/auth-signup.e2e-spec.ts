@@ -373,7 +373,7 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
 
     expect(redisSetMock).toHaveBeenCalledTimes(1);
     const [redisKey, redisValue] = redisSetMock.mock.calls[0];
-    expect(redisKey).toBe(`user:${userRow.email.toLowerCase()}`);
+    expect(redisKey).toMatch(/^user:.+\..+$/);
     expect(JSON.parse(redisValue)).toEqual({
       dob: userRow.dob,
       email: userRow.email,

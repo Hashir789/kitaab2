@@ -18,6 +18,10 @@ export class EmailVerifyQueryDto {
 }
 
 export class ForgotPasswordDto {
+  @IsString()
+  @IsNotEmpty()
+  full_name: string;
+
   @IsEmail()
   @IsNotEmpty()
   email: string;
@@ -63,6 +67,10 @@ export class RefreshDto {
 }
 
 export class ResendLinkDto {
+  @IsString()
+  @IsNotEmpty()
+  full_name: string;
+
   @IsEmail()
   @IsNotEmpty()
   email: string;

@@ -39,3 +39,8 @@ export interface EncryptWithKeyBodyInterface {
   iv: Uint8Array;
   plaintext: string;
 }
+
+export interface DecryptWithKeyBodyInterface {
+  key: AesGcmKey;
+  ciphertext: string;
+}

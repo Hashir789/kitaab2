@@ -31,13 +31,16 @@ describe('AuthController (e2e) - POST /auth/login', () => {
   const userRow = {
     id: 1,
     password_hash: 'stored-hash',
-    full_name: 'Muhammad Hashir',
-    email: 'muhammad@example.com',
+    full_name: 'encrypted-full-name',
+    email: 'encrypted-email',
     gender: 'male',
     dob: '2000-01-01',
     created_at: new Date('2026-01-01T00:00:00.000Z'),
     two_factor_enabled: false,
     email_verified: true,
+    key_salt: 'key-salt',
+    key_iv: 'key-iv',
+    encrypted_master_key: 'encrypted-master-key',
   };
 
   beforeEach(async () => {
@@ -270,9 +273,12 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       .expect((res) => {
         expect(res.body).toEqual({
           dob: '2000-01-01',
-          email: 'muhammad@example.com',
+          email: userRow.email,
           gender: 'male',
-          full_name: 'Muhammad Hashir',
+          full_name: userRow.full_name,
+          key_salt: userRow.key_salt,
+          key_iv: userRow.key_iv,
+          encrypted_master_key: userRow.encrypted_master_key,
           created_at: userRow.created_at.toISOString(),
           two_factor_enabled: false,
           access_token: 'access-token',

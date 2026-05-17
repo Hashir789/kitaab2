@@ -6,6 +6,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { RedisService } from '../../src/database/redis/redis.service';
 import { PostgresService } from '../../src/database/postgres/postgres.service';
+import { CryptoService } from '../../src/crypto/crypto.service';
 
 const speakeasyVerifyMock = jest.fn();
 
@@ -45,6 +46,11 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
       .overrideProvider(ConfigService)
       .useValue({
         get: jest.fn(),
+      })
+      .overrideProvider(CryptoService)
+      .useValue({
+        encryptEmailForLookup: jest.fn().mockResolvedValue('encrypted-email'),
+        decryptSecret: jest.fn().mockResolvedValue('BASE32SECRET'),
       })
       .compile();
 
@@ -211,7 +217,7 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
       .send(validPayload)
       .expect(200)
       .expect((res) => {
-        expect(res.body).toEqual({ verified: true });
+        expect(res.body).toEqual({});
       });
 
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
@@ -228,7 +234,7 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
       .send(validPayload)
       .expect(200)
       .expect((res) => {
-        expect(res.body).toEqual({ verified: true });
+        expect(res.body).toEqual({});
       });
 
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);

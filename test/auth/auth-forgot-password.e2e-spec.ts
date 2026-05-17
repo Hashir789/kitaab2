@@ -89,7 +89,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
   it('-> 400 when email invalid', async () => {
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'not-an-email' })
+      .send({ full_name: 'Muhammad', email: 'not-an-email' })
       .expect(400);
 
     expect(postgresQueryMock).not.toHaveBeenCalled();
@@ -98,7 +98,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
   it('-> 400 when payload contains forbidden extra fields', async () => {
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'muhammad@example.com', admin: true })
+      .send({ full_name: 'Muhammad', email: 'muhammad@example.com', admin: true })
       .expect(400);
 
     expect(postgresQueryMock).not.toHaveBeenCalled();
@@ -109,7 +109,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'missing@example.com' })
+      .send({ full_name: 'Muhammad', email: 'missing@example.com' })
       .expect(404);
 
     expect(redisSetMock).not.toHaveBeenCalled();
@@ -121,7 +121,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'muhammad@example.com' })
+      .send({ full_name: 'Muhammad', email: 'muhammad@example.com' })
       .expect(404);
 
     expect(redisSetMock).not.toHaveBeenCalled();
@@ -132,7 +132,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'muhammad@example.com' })
+      .send({ full_name: 'Muhammad', email: 'muhammad@example.com' })
       .expect(500);
 
     expect(redisSetMock).not.toHaveBeenCalled();
@@ -140,36 +140,36 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
   });
 
   it('-> 500 mapped when redis.set throws', async () => {
-    postgresQueryMock.mockResolvedValueOnce([{ id: 1, full_name: 'Muhammad' }]);
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
     redisSetMock.mockRejectedValueOnce(new Error('redis boom'));
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'muhammad@example.com' })
+      .send({ full_name: 'Muhammad', email: 'muhammad@example.com' })
       .expect(500);
 
     expect(sendPasswordResetEmailMock).not.toHaveBeenCalled();
   });
 
   it('-> 500 mapped when email send throws', async () => {
-    postgresQueryMock.mockResolvedValueOnce([{ id: 1, full_name: 'Muhammad' }]);
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
     redisSetMock.mockResolvedValue(undefined);
     sendPasswordResetEmailMock.mockRejectedValueOnce(new Error('smtp boom'));
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'muhammad@example.com' })
+      .send({ full_name: 'Muhammad', email: 'muhammad@example.com' })
       .expect(500);
   });
 
   it('-> 200 and sends email with plainToken when reset URL not configured', async () => {
-    postgresQueryMock.mockResolvedValueOnce([{ id: 1, full_name: 'Muhammad' }]);
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
     redisSetMock.mockResolvedValue(undefined);
     sendPasswordResetEmailMock.mockResolvedValue(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'muhammad@example.com' })
+      .send({ full_name: 'Muhammad', email: 'muhammad@example.com' })
       .expect(200)
       .expect('');
 
@@ -195,13 +195,13 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
     await app.close();
     await setupApp({ PASSWORD_RESET_URL_BASE: 'https://app.example.com/reset' });
 
-    postgresQueryMock.mockResolvedValueOnce([{ id: 2, full_name: 'Hashir' }]);
+    postgresQueryMock.mockResolvedValueOnce([{ id: 2 }]);
     redisSetMock.mockResolvedValue(undefined);
     sendPasswordResetEmailMock.mockResolvedValue(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
-      .send({ email: 'hashir@example.com' })
+      .send({ full_name: 'Hashir', email: 'hashir@example.com' })
       .expect(200);
 
     expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(

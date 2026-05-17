@@ -15,7 +15,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
   const configGetMock = jest.fn();
   const sendOtpVerificationEmailMock = jest.fn();
 
-  const validPayload = { email: 'muhammad@example.com' };
+  const validPayload = { full_name: 'Muhammad Hashir', email: 'muhammad@example.com' };
 
   beforeEach(async () => {
     postgresQueryMock.mockReset();
@@ -79,7 +79,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
   it('-> 400 when email invalid', async () => {
     await request(app.getHttpServer())
       .post('/auth/resend-link')
-      .send({ email: 'not-an-email' })
+      .send({ full_name: 'Muhammad Hashir', email: 'not-an-email' })
       .expect(400);
 
     expect(postgresQueryMock).not.toHaveBeenCalled();
@@ -108,7 +108,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
 
   it('-> 400 when email already verified', async () => {
     postgresQueryMock.mockResolvedValueOnce([
-      { full_name: 'Muhammad Hashir', email_verified: true },
+      { email_verified: true },
     ]);
 
     const res = await request(app.getHttpServer())
@@ -122,7 +122,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
 
   it('-> 404 when UPDATE returns no rows', async () => {
     postgresQueryMock
-      .mockResolvedValueOnce([{ full_name: 'Muhammad Hashir', email_verified: false }])
+      .mockResolvedValueOnce([{ email_verified: false }])
       .mockResolvedValueOnce([]);
 
     await request(app.getHttpServer()).post('/auth/resend-link').send(validPayload).expect(404);
@@ -132,7 +132,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
 
   it('-> 204 on happy path and sends OTP email', async () => {
     postgresQueryMock
-      .mockResolvedValueOnce([{ full_name: 'Muhammad Hashir', email_verified: false }])
+      .mockResolvedValueOnce([{ email_verified: false }])
       .mockResolvedValueOnce([{ id: 1 }]);
 
     await request(app.getHttpServer())
@@ -146,7 +146,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
     expect(sendOtpVerificationEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({
         email: validPayload.email,
-        full_name: 'Muhammad Hashir',
+        full_name: validPayload.full_name,
         expires_in_minutes: 15,
       }),
     );
@@ -155,7 +155,7 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
 
   it('-> 500 mapped when sendOtpVerificationEmail throws', async () => {
     postgresQueryMock
-      .mockResolvedValueOnce([{ full_name: 'Muhammad Hashir', email_verified: false }])
+      .mockResolvedValueOnce([{ email_verified: false }])
       .mockResolvedValueOnce([{ id: 1 }]);
     sendOtpVerificationEmailMock.mockRejectedValueOnce(new Error('smtp down'));
 

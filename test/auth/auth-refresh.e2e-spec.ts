@@ -22,10 +22,10 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
 
   const userRow = {
     id: 1,
-    email: 'muhammad@example.com',
     email_verified: true,
     refresh_token_hash: incomingRefreshHash,
   };
+  const userEmail = 'muhammad@example.com';
 
   beforeEach(async () => {
     postgresQueryMock.mockReset();
@@ -37,6 +37,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
       const table: Record<string, any> = {
         JWT_PUBLIC_KEY: 'test-public',
         JWT_PRIVATE_KEY: 'test-private',
+        PASSWORD_PEPPER: 'pepper',
         REFRESH_TOKEN_EXPIRATION_TIME: '7d',
         ACCESS_TOKEN_EXPIRATION_TIME: '1h',
       };
@@ -116,7 +117,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
   it('-> 401 when token type is not refresh', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: userRow.id,
-      email: userRow.email,
+      email: userEmail,
       type: 'access',
     });
 
@@ -132,7 +133,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
   it('-> 401 when user not found', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: userRow.id,
-      email: userRow.email,
+      email: userEmail,
       type: 'refresh',
     });
     postgresQueryMock.mockResolvedValueOnce([]);
@@ -148,7 +149,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
   it('-> 401 when refresh_token_hash mismatch', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: userRow.id,
-      email: userRow.email,
+      email: userEmail,
       type: 'refresh',
     });
     postgresQueryMock.mockResolvedValueOnce([
@@ -170,7 +171,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
   it('-> 401 when stored refresh_token_hash is null', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: userRow.id,
-      email: userRow.email,
+      email: userEmail,
       type: 'refresh',
     });
     postgresQueryMock.mockResolvedValueOnce([
@@ -191,7 +192,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
   it('-> 200 returns new access_token on happy path', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: userRow.id,
-      email: userRow.email,
+      email: userEmail,
       type: 'refresh',
     });
     postgresQueryMock.mockResolvedValueOnce([userRow]).mockResolvedValueOnce([]);
@@ -212,7 +213,7 @@ describe('AuthController (e2e) - POST /auth/refresh', () => {
   it('-> 500 mapped when postgres query throws', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: userRow.id,
-      email: userRow.email,
+      email: userEmail,
       type: 'refresh',
     });
     postgresQueryMock.mockRejectedValueOnce(new Error('db down'));

@@ -1,18 +1,54 @@
 import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
+import { Logger } from '../logger/logger.service';
 import { createHash, webcrypto } from 'node:crypto';
-import { DeriveKeyBodyInterface, EncryptWithKeyBodyInterface, PrepareSignupStorageBodyInterface, PrepareSignupStorageResultInterface, WrapMasterKeyBodyInterface } from './crypto.interface';
+import { DecryptWithKeyBodyInterface, DeriveKeyBodyInterface, EncryptWithKeyBodyInterface, PrepareSignupStorageBodyInterface, PrepareSignupStorageResultInterface, WrapMasterKeyBodyInterface } from './crypto.interface';
 
 type AesGcmKey = import('node:crypto').webcrypto.CryptoKey;
 
 const encoder = new TextEncoder();
+const decoder = new TextDecoder();
 const PBKDF2_ITERATIONS = 250_000;
 
 @Injectable()
 export class CryptoService {
-  constructor(private readonly configService: ConfigService) {}
+  constructor(
+    private readonly loggerService: Logger,
+    private readonly configService: ConfigService
+  ) {}
+
+  async encryptEmailForLookup(email: string): Promise<string> {
+    this.loggerService.log('encryptEmailForLookup {encryption}');
+    const pepper = this.configService.get<string>('PASSWORD_PEPPER') ?? '';
+    const server_key = await this.deriveKey({ password: pepper, salt: encoder.encode('kitab:v1:server-secret') });
+    const hash = createHash('sha256').update(email).digest();
+    return this.encryptWithKey({
+      plaintext: email,
+      key: server_key,
+      iv: new Uint8Array(hash.subarray(0, 12)),
+    });
+  }
+
+  async decryptSecret(secret: string): Promise<string> {
+    this.loggerService.log('decryptSecret {encryption}');
+    const pepper = this.configService.get<string>('PASSWORD_PEPPER') ?? '';
+    const server_key = await this.deriveKey({ password: pepper, salt: encoder.encode('kitab:v1:server-secret') });
+    return this.decryptWithKey({ ciphertext: secret, key: server_key });
+  }
+
+  async encryptSecret(secret: string): Promise<string> {
+    this.loggerService.log('encryptSecret {encryption}');
+    const pepper = this.configService.get<string>('PASSWORD_PEPPER') ?? '';
+    const server_key = await this.deriveKey({ password: pepper, salt: encoder.encode('kitab:v1:server-secret') });
+    return this.encryptWithKey({
+      plaintext: secret,
+      key: server_key,
+      iv: webcrypto.getRandomValues(new Uint8Array(12)),
+    });
+  }
 
   async prepareSignupStorage(body: PrepareSignupStorageBodyInterface): Promise<PrepareSignupStorageResultInterface> {
+    this.loggerService.log('prepareSignupStorage {encryption}');
     const { password, recovery_key } = body;
     const { full_name, email, secret } = body.fields;
     const master_key = (await webcrypto.subtle.generateKey(
@@ -47,6 +83,7 @@ export class CryptoService {
   }
 
   private async wrapMasterKey(body: WrapMasterKeyBodyInterface) {
+    this.loggerService.log('wrapMasterKey {encryption}');
     const { raw_master_key, password } = body;
     const iv = webcrypto.getRandomValues(new Uint8Array(12));
     const salt = webcrypto.getRandomValues(new Uint8Array(12));
@@ -64,6 +101,7 @@ export class CryptoService {
   }
 
   private async deriveKey(body: DeriveKeyBodyInterface): Promise<AesGcmKey> {
+    this.loggerService.log('deriveKey {encryption}');
     const { salt, password } = body;
     const password_key = await webcrypto.subtle.importKey(
       'raw',
@@ -87,6 +125,7 @@ export class CryptoService {
   }
 
   private async encryptWithKey(body: EncryptWithKeyBodyInterface): Promise<string> {
+    this.loggerService.log('encryptWithKey {encryption}');
     const { iv, key, plaintext } = body;
     const ciphertext = await webcrypto.subtle.encrypt(
       { name: 'AES-GCM', iv, additionalData: encoder.encode('kitaab:v1:user-data') },
@@ -94,5 +133,17 @@ export class CryptoService {
       encoder.encode(plaintext),
     );
     return `${Buffer.from(new Uint8Array(iv)).toString('base64')}.${Buffer.from(new Uint8Array(ciphertext)).toString('base64')}`;
+  }
+
+  private async decryptWithKey(body: DecryptWithKeyBodyInterface): Promise<string> {
+    this.loggerService.log('decryptWithKey {encryption}');
+    const { ciphertext, key } = body;
+    const [iv_base64, data_base64] = ciphertext.split('.');
+    const decrypted = await webcrypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: Buffer.from(iv_base64, 'base64'), additionalData: encoder.encode('kitaab:v1:user-data') },
+      key,
+      Buffer.from(data_base64, 'base64'),
+    );
+    return decoder.decode(decrypted);
   }
 }

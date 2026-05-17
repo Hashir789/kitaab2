@@ -19,7 +19,6 @@ describe('AuthController (e2e) - GET /auth/me', () => {
   const configGetMock = jest.fn();
 
   const userEmail = 'muhammad@example.com';
-  const redisSessionKey = `user:${userEmail.toLowerCase()}`;
 
   const cachedSession = {
     dob: '2000-01-01',
@@ -42,6 +41,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     configGetMock.mockImplementation((key: string) => {
       const table: Record<string, any> = {
         JWT_PUBLIC_KEY: 'test-public',
+        PASSWORD_PEPPER: 'pepper',
       };
       return table[key];
     });
@@ -120,7 +120,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
       .query({ email: userEmail })
       .expect(404);
 
-    expect(redisGetMock).toHaveBeenCalledWith(redisSessionKey);
+    expect(redisGetMock).toHaveBeenCalledWith(expect.stringMatching(/^user:.+\..+$/));
     expect(redisDelMock).not.toHaveBeenCalled();
   });
 
@@ -169,7 +169,8 @@ describe('AuthController (e2e) - GET /auth/me', () => {
       });
 
     expect(redisGetMock).toHaveBeenCalledTimes(1);
-    expect(redisGetMock).toHaveBeenCalledWith(redisSessionKey);
+    const redisSessionKey = redisGetMock.mock.calls[0][0];
+    expect(redisSessionKey).toMatch(/^user:.+\..+$/);
     expect(redisDelMock).toHaveBeenCalledTimes(1);
     expect(redisDelMock).toHaveBeenCalledWith(redisSessionKey);
   });
@@ -185,7 +186,8 @@ describe('AuthController (e2e) - GET /auth/me', () => {
         expect(res.body).toEqual(cachedSession);
       });
 
-    expect(redisGetMock).toHaveBeenCalledWith(redisSessionKey);
+    const redisSessionKey = redisGetMock.mock.calls[0][0];
+    expect(redisSessionKey).toMatch(/^user:.+\..+$/);
     expect(redisDelMock).toHaveBeenCalledTimes(1);
     expect(redisDelMock).toHaveBeenCalledWith(redisSessionKey);
   });
