@@ -1,5 +1,5 @@
 import { VisitorService } from './visitors.service';
-import { Body, Controller, HttpCode, HttpStatus, Post } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Post, Query } from '@nestjs/common';
 import { TrackVisitorsDto, VisitorEmailsDto, VisitorMessagesDto } from './visitors.dto';
 
 @Controller('visitors')
@@ -11,6 +11,12 @@ export class VisitorsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   trackVisitor(@Body() body: TrackVisitorsDto) {
     return this.visitorService.trackVisitor(body);
+  }
+
+  @Get('analytics')
+  @HttpCode(HttpStatus.OK)
+  visitorAnalytics(@Query('include') include?: string) {
+    return this.visitorService.visitorAnalytics(include);
   }
 
   @Post('message')
