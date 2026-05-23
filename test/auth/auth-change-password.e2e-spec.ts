@@ -8,6 +8,7 @@ import { Logger } from '../../src/logger/logger.service';
 import { JwtAuthGuard } from '../../src/auth/auth.guard';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { RedisService } from '../../src/database/redis/redis.service';
+import { EncryptionService } from '../../src/encryption/encryption.service';
 import { PostgresService } from '../../src/database/postgres/postgres.service';
 
 jest.mock('bcrypt', () => ({
@@ -23,11 +24,25 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
   const postgresQueryMock = jest.fn();
   const jwtVerifyAsyncMock = jest.fn();
   const configGetMock = jest.fn();
+  const hmacEmailMock = jest.fn();
+  const unlockMasterKeyWithPasswordMock = jest.fn();
+  const wrapMasterKeyWithPasswordMock = jest.fn();
+
+  const selectRow = {
+    id: 1,
+    password_hash: 'stored-hash',
+    key_salt: 'old-key-salt',
+    key_iv: 'old-key-iv',
+    encrypted_master_key: 'old-encrypted-master-key',
+  };
 
   beforeEach(async () => {
     postgresQueryMock.mockReset();
     jwtVerifyAsyncMock.mockReset();
     configGetMock.mockReset();
+    hmacEmailMock.mockReset();
+    unlockMasterKeyWithPasswordMock.mockReset();
+    wrapMasterKeyWithPasswordMock.mockReset();
     (compare as unknown as jest.Mock).mockReset();
     (hash as unknown as jest.Mock).mockReset();
 
@@ -37,6 +52,14 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
         PASSWORD_PEPPER: 'pepper',
       };
       return table[key];
+    });
+
+    hmacEmailMock.mockReturnValue('email-hmac');
+    unlockMasterKeyWithPasswordMock.mockReturnValue(Buffer.alloc(32, 1));
+    wrapMasterKeyWithPasswordMock.mockReturnValue({
+      key_salt: 'new-key-salt',
+      key_iv: 'new-key-iv',
+      encrypted_master_key: 'new-encrypted-master-key',
     });
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
@@ -62,6 +85,12 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       .overrideProvider(ConfigService)
       .useValue({
         get: configGetMock,
+      })
+      .overrideProvider(EncryptionService)
+      .useValue({
+        hmacEmail: hmacEmailMock,
+        unlockMasterKeyWithPassword: unlockMasterKeyWithPasswordMock,
+        wrapMasterKeyWithPassword: wrapMasterKeyWithPasswordMock,
       })
       .compile();
 
@@ -287,7 +316,7 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       type: 'access',
       email_verified: true,
     });
-    postgresQueryMock.mockResolvedValueOnce([{ id: 1, password_hash: 'stored-hash' }]);
+    postgresQueryMock.mockResolvedValueOnce([selectRow]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(false);
 
     await request(app.getHttpServer())
@@ -297,6 +326,7 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       .expect(401);
 
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
+    expect(unlockMasterKeyWithPasswordMock).not.toHaveBeenCalled();
     expect(hash as unknown as jest.Mock).not.toHaveBeenCalled();
   });
 
@@ -307,7 +337,7 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       type: 'access',
       email_verified: true,
     });
-    postgresQueryMock.mockResolvedValueOnce([{ id: 1, password_hash: 'stored-hash' }]);
+    postgresQueryMock.mockResolvedValueOnce([selectRow]);
     (compare as unknown as jest.Mock).mockRejectedValueOnce(new Error('bcrypt boom'));
 
     await request(app.getHttpServer())
@@ -335,6 +365,28 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       .expect(500);
   });
 
+  it('-> 500 mapped when unlockMasterKeyWithPassword throws', async () => {
+    jwtVerifyAsyncMock.mockResolvedValueOnce({
+      sub: 1,
+      email: 'muhammad@example.com',
+      type: 'access',
+      email_verified: true,
+    });
+    postgresQueryMock.mockResolvedValueOnce([selectRow]);
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+    unlockMasterKeyWithPasswordMock.mockImplementationOnce(() => {
+      throw new Error('Invalid password.');
+    });
+
+    await request(app.getHttpServer())
+      .patch('/auth/password')
+      .set('Authorization', 'Bearer access-token')
+      .send({ current_password: 'password123', new_password: 'password456' })
+      .expect(500);
+
+    expect(hash as unknown as jest.Mock).not.toHaveBeenCalled();
+  });
+
   it('-> 401 when update returns no rows (race condition)', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce({
       sub: 1,
@@ -343,7 +395,7 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       email_verified: true,
     });
     postgresQueryMock
-      .mockResolvedValueOnce([{ id: 1, password_hash: 'stored-hash' }])
+      .mockResolvedValueOnce([selectRow])
       .mockResolvedValueOnce([]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
     (hash as unknown as jest.Mock).mockResolvedValueOnce('new-hash');
@@ -365,7 +417,7 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       email_verified: true,
     });
     postgresQueryMock
-      .mockResolvedValueOnce([{ id: 1, password_hash: 'stored-hash' }])
+      .mockResolvedValueOnce([selectRow])
       .mockResolvedValueOnce([{ id: 1 }]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
     (hash as unknown as jest.Mock).mockResolvedValueOnce('new-hash');
@@ -381,10 +433,27 @@ describe('AuthController (e2e) - PATCH /auth/password', () => {
       'password123' + 'pepper',
       'stored-hash',
     );
+    expect(unlockMasterKeyWithPasswordMock).toHaveBeenCalledWith({
+      key_iv: selectRow.key_iv,
+      key_salt: selectRow.key_salt,
+      encrypted_master_key: selectRow.encrypted_master_key,
+      password: 'password123',
+    });
+    expect(wrapMasterKeyWithPasswordMock).toHaveBeenCalledTimes(1);
     expect(hash as unknown as jest.Mock).toHaveBeenCalledWith(
       'password456' + 'pepper',
       12,
     );
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+    const updateCall = postgresQueryMock.mock.calls[1];
+    expect(updateCall[0]).toMatch(/UPDATE users/);
+    expect(updateCall[1]).toEqual([
+      'new-hash',
+      'new-key-salt',
+      'new-key-iv',
+      'new-encrypted-master-key',
+      1,
+      'email-hmac',
+    ]);
   });
 });

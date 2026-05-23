@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MinLength, IsBoolean, IsDateString, IsIn, IsOptional, Length, Matches, IsEmail } from 'class-validator';
+import { IsNotEmpty, IsString, MinLength, IsBoolean, IsDateString, IsIn, Length, Matches, IsEmail } from 'class-validator';
 
 export class ChangePasswordDto {
   @IsString()
@@ -42,12 +42,6 @@ export class LoginDto {
   anonymous_id: string;
 }
 
-export class MeQueryDto {
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-}
-
 export class OtpVerifyDto {
   @IsEmail()
   @IsNotEmpty()
@@ -58,12 +52,6 @@ export class OtpVerifyDto {
   @Length(4, 4)
   @Matches(/^\d{4}$/, { message: 'otp must be 4 digits' })
   otp: string;
-}
-
-export class RefreshDto {
-  @IsString()
-  @IsNotEmpty()
-  refresh_token: string;
 }
 
 export class ResendLinkDto {
@@ -85,6 +73,10 @@ export class ResetPasswordDto {
   @IsNotEmpty()
   @MinLength(8)
   new_password: string;
+
+  @IsString()
+  @IsNotEmpty()
+  recovery_key: string;
 }
 
 export class SignupDto {
@@ -112,7 +104,7 @@ export class SignupDto {
   dob: string;
 
   @IsString()
-  @IsOptional()
+  @IsNotEmpty()
   @MinLength(8)
   recovery_key: string;
 }

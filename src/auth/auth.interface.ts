@@ -13,9 +13,16 @@ export interface AuthenticatedRequest extends Request {
   user: JwtAuthUser;
 }
 
-export interface ChangePasswordQueryInterface {
+export interface ChangePasswordSelectQueryInterface {
   id: string;
+  key_iv: string;
+  key_salt: string;
   password_hash: string;
+  encrypted_master_key: string;
+}
+
+export interface ChangePasswordUpdateQueryInterface {
+  id: string;
 }
 
 export interface EmailVerifyResult {
@@ -39,7 +46,7 @@ export interface loginResult {
   key_salt: string;
   full_name: string;
   access_token: string;
-  refresh_token: string;
+  email_verified: boolean;
   two_factor_enabled: boolean;
   encrypted_master_key: string;
 }
@@ -59,75 +66,47 @@ export interface loginQueryInterface {
   encrypted_master_key: string;
 }
 
-export interface MeResult {
-  dob: string;
-  email: string;
-  gender: string;
-  full_name: string;
-  created_at: string;
-  access_token: string;
-  two_factor_enabled: boolean;
-}
-
 export interface otpVerifyQueryInterface {
-  secret: string;
   email_verified: boolean;
-}
-
-export interface refreshTokenResultInterface {
-  access_token: string;
-}
-
-export interface refreshTokenQueryInterface {
-  id: number;
-  email_verified: boolean;
-  refresh_token_hash: string | null;
 }
 
 export interface resendLinkGetQueryInterface {
   email_verified: boolean;
 }
 
-export interface resendLinkUpdateQueryInterface {
-  id: number;
+export interface ResetPasswordSelectQueryInterface {
+  id: string;
+  recovery_key_iv: string;
+  recovery_key_salt: string;
+  recovery_encrypted_master_key: string;
 }
 
-export interface ResetPasswordQueryInterface {
+export interface ResetPasswordUpdateQueryInterface {
   id: string;
 }
 
-export interface signupResult {
+export interface SignupResult {
   dob: string;
   email: string;
   gender: string;
+  key_iv: string;
+  key_salt: string;
   created_at: Date;
   full_name: string;
   access_token: string;
-  refresh_token: string;
-  two_factor_enabled: boolean;
+  encrypted_master_key: string;
 }
 
 export interface signupInsertQueryInterface {
   id: number;
   created_at: Date;
-  email_verified: string;
-  two_factor_enabled: boolean;
-}
-
-export interface signupUpdateQueryInterface {
-  id: number;
+  email_verified: boolean;
 }
 
 export interface Update2FaGetQueryInterface {
-  secret: string;
   email_verified: boolean;
 }
 
 export interface Update2FaPatchQueryInterface {
   two_factor_enabled: boolean;
-}
-
-export interface verifyOtpResult {
-  otp: string;
-  secret: string;
 }

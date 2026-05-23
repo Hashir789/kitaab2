@@ -8,10 +8,8 @@ import { Injectable, CanActivate, ExecutionContext, HttpException, HttpStatus } 
 export class JwtAuthGuard implements CanActivate {
 
   private readonly excludedUrls: string[] = [
-    '/auth/me',
     '/auth/login',
     '/auth/signup',
-    '/auth/refresh',
     '/health-check',
     '/visitors/track',
     '/visitors/email',

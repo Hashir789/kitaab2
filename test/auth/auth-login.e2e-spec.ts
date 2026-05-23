@@ -6,6 +6,7 @@ import { AppModule } from '../../src/app/app.module';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { RedisService } from '../../src/database/redis/redis.service';
+import { EncryptionService } from '../../src/encryption/encryption.service';
 import { PostgresService } from '../../src/database/postgres/postgres.service';
 
 jest.mock('bcrypt', () => ({
@@ -21,6 +22,7 @@ describe('AuthController (e2e) - POST /auth/login', () => {
   const postgresQueryMock = jest.fn();
   const jwtSignAsyncMock = jest.fn();
   const configGetMock = jest.fn();
+  const hmacEmailMock = jest.fn();
 
   const validPayload = {
     email: 'muhammad@example.com',
@@ -32,7 +34,7 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     id: 1,
     password_hash: 'stored-hash',
     full_name: 'encrypted-full-name',
-    email: 'encrypted-email',
+    email: 'email-hmac',
     gender: 'male',
     dob: '2000-01-01',
     created_at: new Date('2026-01-01T00:00:00.000Z'),
@@ -47,18 +49,20 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     postgresQueryMock.mockReset();
     jwtSignAsyncMock.mockReset();
     configGetMock.mockReset();
+    hmacEmailMock.mockReset();
     (compare as unknown as jest.Mock).mockReset();
 
     configGetMock.mockImplementation((key: string) => {
       const table: Record<string, any> = {
         PASSWORD_PEPPER: 'pepper',
-        REFRESH_TOKEN_EXPIRATION_TIME: '7d',
         ACCESS_TOKEN_EXPIRATION_TIME: '1h',
         JWT_PUBLIC_KEY: 'test-public',
         JWT_PRIVATE_KEY: 'test-private',
       };
       return table[key];
     });
+
+    hmacEmailMock.mockReturnValue('email-hmac');
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -83,6 +87,10 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       .overrideProvider(ConfigService)
       .useValue({
         get: configGetMock,
+      })
+      .overrideProvider(EncryptionService)
+      .useValue({
+        hmacEmail: hmacEmailMock,
       })
       .compile();
 
@@ -256,15 +264,12 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       .expect(500);
   });
 
-  it('-> 200 and returns tokens on happy path', async () => {
+  it('-> 200 and returns access token + vault material on happy path', async () => {
     postgresQueryMock
       .mockResolvedValueOnce([userRow])
-      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
-    jwtSignAsyncMock
-      .mockResolvedValueOnce('access-token')
-      .mockResolvedValueOnce('refresh-token');
+    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
 
     await request(app.getHttpServer())
       .post('/auth/login')
@@ -272,22 +277,28 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       .expect(200)
       .expect((res) => {
         expect(res.body).toEqual({
-          dob: '2000-01-01',
+          dob: userRow.dob,
           email: userRow.email,
-          gender: 'male',
+          gender: userRow.gender,
           full_name: userRow.full_name,
           key_salt: userRow.key_salt,
           key_iv: userRow.key_iv,
           encrypted_master_key: userRow.encrypted_master_key,
           created_at: userRow.created_at.toISOString(),
-          two_factor_enabled: false,
+          email_verified: userRow.email_verified,
+          two_factor_enabled: userRow.two_factor_enabled,
           access_token: 'access-token',
-          refresh_token: 'refresh-token',
         });
       });
 
     expect(compare).toHaveBeenCalledWith('password123' + 'pepper', 'stored-hash');
-    expect(postgresQueryMock).toHaveBeenCalledTimes(3);
-    expect(jwtSignAsyncMock).toHaveBeenCalledTimes(2);
+    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+    expect(jwtSignAsyncMock).toHaveBeenCalledTimes(1);
+    expect(jwtSignAsyncMock).toHaveBeenCalledWith({
+      sub: userRow.id,
+      email: validPayload.email,
+      type: 'access',
+      email_verified: userRow.email_verified,
+    });
   });
 });

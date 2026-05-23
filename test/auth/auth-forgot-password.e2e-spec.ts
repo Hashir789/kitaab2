@@ -170,7 +170,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
       .send({ full_name: 'Muhammad', email: 'muhammad@example.com' })
-      .expect(200)
+      .expect(204)
       .expect('');
 
     expect(redisSetMock).toHaveBeenCalledTimes(1);
@@ -202,7 +202,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
     await request(app.getHttpServer())
       .post('/auth/forgot-password')
       .send({ full_name: 'Hashir', email: 'hashir@example.com' })
-      .expect(200);
+      .expect(204);
 
     expect(sendPasswordResetEmailMock).toHaveBeenCalledWith(
       expect.objectContaining({

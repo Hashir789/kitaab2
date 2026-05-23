@@ -5,28 +5,34 @@ import { AppModule } from '../../src/app/app.module';
 import { Test, TestingModule } from '@nestjs/testing';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { RedisService } from '../../src/database/redis/redis.service';
+import { EncryptionService } from '../../src/encryption/encryption.service';
 import { PostgresService } from '../../src/database/postgres/postgres.service';
-import { CryptoService } from '../../src/crypto/crypto.service';
 
-const speakeasyVerifyMock = jest.fn();
-
-jest.mock('speakeasy', () => ({
-  totp: {
-    verify: (...args: any[]) => speakeasyVerifyMock(...args),
-  },
-  generateSecret: jest.fn(() => ({ base32: 'TEST_SECRET' })),
+jest.mock('bcrypt', () => ({
+  compare: jest.fn(),
+  hash: jest.fn(),
 }));
+
+import { compare } from 'bcrypt';
 
 describe('AuthController (e2e) - POST /auth/otp-verify', () => {
   let app: INestApplication<App>;
 
   const postgresQueryMock = jest.fn();
+  const redisGetMock = jest.fn();
+  const redisDelMock = jest.fn();
+  const hmacEmailMock = jest.fn();
 
   const validPayload = { email: 'muhammad@example.com', otp: '1234' };
 
   beforeEach(async () => {
     postgresQueryMock.mockReset();
-    speakeasyVerifyMock.mockReset();
+    redisGetMock.mockReset();
+    redisDelMock.mockReset();
+    hmacEmailMock.mockReset();
+    (compare as unknown as jest.Mock).mockReset();
+
+    hmacEmailMock.mockReturnValue('email-hmac');
 
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
@@ -39,18 +45,17 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
       .overrideProvider(RedisService)
       .useValue({
         set: jest.fn(),
-        get: jest.fn(),
-        del: jest.fn(),
+        get: redisGetMock,
+        del: redisDelMock,
         ping: jest.fn(),
       })
       .overrideProvider(ConfigService)
       .useValue({
         get: jest.fn(),
       })
-      .overrideProvider(CryptoService)
+      .overrideProvider(EncryptionService)
       .useValue({
-        encryptEmailForLookup: jest.fn().mockResolvedValue('encrypted-email'),
-        decryptSecret: jest.fn().mockResolvedValue('BASE32SECRET'),
+        hmacEmail: hmacEmailMock,
       })
       .compile();
 
@@ -133,43 +138,71 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
     expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
-  it('-> 404 when user not found', async () => {
-    postgresQueryMock.mockResolvedValueOnce([]);
-
-    await request(app.getHttpServer())
-      .post('/auth/otp-verify')
-      .send({ ...validPayload, email: 'missing@example.com' })
-      .expect(404);
-
-    expect(speakeasyVerifyMock).not.toHaveBeenCalled();
-  });
-
-  it('-> 404 when select returns null/undefined', async () => {
-    postgresQueryMock.mockResolvedValueOnce(undefined);
-
-    await request(app.getHttpServer())
-      .post('/auth/otp-verify')
-      .send(validPayload)
-      .expect(404);
-
-    expect(speakeasyVerifyMock).not.toHaveBeenCalled();
-  });
-
-  it('-> 400 when otp invalid/expired', async () => {
-    postgresQueryMock.mockResolvedValueOnce([
-      { secret: 'BASE32SECRET', email_verified: false },
-    ]);
-    speakeasyVerifyMock.mockReturnValueOnce(false);
+  it('-> 400 when redis has no stored otp hash', async () => {
+    redisGetMock.mockResolvedValueOnce(null);
 
     await request(app.getHttpServer())
       .post('/auth/otp-verify')
       .send(validPayload)
       .expect(400);
 
-    expect(postgresQueryMock).toHaveBeenCalledTimes(1);
+    expect(compare).not.toHaveBeenCalled();
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+    expect(redisDelMock).not.toHaveBeenCalled();
   });
 
-  it('-> 500 mapped when select throws', async () => {
+  it('-> 400 when bcrypt.compare returns false (wrong otp)', async () => {
+    redisGetMock.mockResolvedValueOnce('stored-otp-hash');
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(false);
+
+    await request(app.getHttpServer())
+      .post('/auth/otp-verify')
+      .send(validPayload)
+      .expect(400);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+    expect(redisDelMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400 when UPDATE returns no rows (user vanished)', async () => {
+    redisGetMock.mockResolvedValueOnce('stored-otp-hash');
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+    postgresQueryMock.mockResolvedValueOnce([]);
+
+    await request(app.getHttpServer())
+      .post('/auth/otp-verify')
+      .send(validPayload)
+      .expect(400);
+
+    expect(redisDelMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when redis.get throws', async () => {
+    redisGetMock.mockRejectedValueOnce(new Error('redis boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/otp-verify')
+      .send(validPayload)
+      .expect(500);
+
+    expect(compare).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when bcrypt.compare throws', async () => {
+    redisGetMock.mockResolvedValueOnce('stored-otp-hash');
+    (compare as unknown as jest.Mock).mockRejectedValueOnce(new Error('bcrypt boom'));
+
+    await request(app.getHttpServer())
+      .post('/auth/otp-verify')
+      .send(validPayload)
+      .expect(500);
+
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 500 mapped when update throws', async () => {
+    redisGetMock.mockResolvedValueOnce('stored-otp-hash');
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
     postgresQueryMock.mockRejectedValueOnce(new Error('db down'));
 
     await request(app.getHttpServer())
@@ -177,66 +210,27 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
       .send(validPayload)
       .expect(500);
 
-    expect(speakeasyVerifyMock).not.toHaveBeenCalled();
+    expect(redisDelMock).not.toHaveBeenCalled();
   });
 
-  it('-> 500 mapped when update throws', async () => {
-    postgresQueryMock
-      .mockResolvedValueOnce([{ secret: 'BASE32SECRET', email_verified: false }])
-      .mockRejectedValueOnce(new Error('db down'));
-    speakeasyVerifyMock.mockReturnValueOnce(true);
+  it('-> 204 and verifies email + deletes redis key on happy path', async () => {
+    redisGetMock.mockResolvedValueOnce('stored-otp-hash');
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+    postgresQueryMock.mockResolvedValueOnce([{ email_verified: true }]);
+    redisDelMock.mockResolvedValueOnce(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/otp-verify')
       .send(validPayload)
-      .expect(500);
-  });
+      .expect(204)
+      .expect('');
 
-  it('-> 500 mapped when speakeasy verify throws', async () => {
-    postgresQueryMock.mockResolvedValueOnce([
-      { secret: 'BASE32SECRET', email_verified: false },
-    ]);
-    speakeasyVerifyMock.mockImplementationOnce(() => {
-      throw new Error('totp boom');
-    });
-
-    await request(app.getHttpServer())
-      .post('/auth/otp-verify')
-      .send(validPayload)
-      .expect(500);
-  });
-
-  it('-> 200 and verifies (updates when previously unverified)', async () => {
-    postgresQueryMock
-      .mockResolvedValueOnce([{ secret: 'BASE32SECRET', email_verified: false }])
-      .mockResolvedValueOnce([]);
-    speakeasyVerifyMock.mockReturnValueOnce(true);
-
-    await request(app.getHttpServer())
-      .post('/auth/otp-verify')
-      .send(validPayload)
-      .expect(200)
-      .expect((res) => {
-        expect(res.body).toEqual({});
-      });
-
-    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
-  });
-
-  it('-> 200 and verifies (no update when already verified)', async () => {
-    postgresQueryMock.mockResolvedValueOnce([
-      { secret: 'BASE32SECRET', email_verified: true },
-    ]);
-    speakeasyVerifyMock.mockReturnValueOnce(true);
-
-    await request(app.getHttpServer())
-      .post('/auth/otp-verify')
-      .send(validPayload)
-      .expect(200)
-      .expect((res) => {
-        expect(res.body).toEqual({});
-      });
-
+    expect(redisGetMock).toHaveBeenCalledWith('otp:email-hmac');
+    expect(compare).toHaveBeenCalledWith(validPayload.otp, 'stored-otp-hash');
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
+    const updateCall = postgresQueryMock.mock.calls[0];
+    expect(updateCall[0]).toMatch(/UPDATE users SET email_verified = TRUE/);
+    expect(updateCall[1]).toEqual(['email-hmac']);
+    expect(redisDelMock).toHaveBeenCalledWith('otp:email-hmac');
   });
 });
