@@ -17,3 +17,26 @@ export interface VisitorMessagesQueryInterface {
   timezone: string;
   visitor_id: number;
 };
+
+export interface AnalyticsSummaryResponse {
+  summary: {
+    clicks: number;
+    navigations: number;
+    visitors: number;
+    visits: number;
+  };
+  device_distribution: Array<{ device_type: string; count: number }>;
+  timezones: Array<{ timezone: string; count: number }>;
+};
+
+export interface AnalyticsAssociationResponse<T> {
+  anonymous_id: string;
+  details: T[];
+};
+
+export interface AnalyticsTableResponse<T> {
+  rows: T[];
+  total: number;
+  page: number;
+  limit: number;
+};

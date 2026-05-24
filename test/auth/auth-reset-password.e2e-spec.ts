@@ -1,3 +1,4 @@
+import { hash } from 'bcrypt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { ConfigService } from '@nestjs/config';
@@ -13,8 +14,6 @@ jest.mock('bcrypt', () => ({
   compare: jest.fn(),
   hash: jest.fn(),
 }));
-
-import { hash } from 'bcrypt';
 
 describe('AuthController (e2e) - POST /auth/reset-password', () => {
   let app: INestApplication<App>;

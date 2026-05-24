@@ -1,3 +1,4 @@
+import { hash } from 'bcrypt';
 import request from 'supertest';
 import { App } from 'supertest/types';
 import { JwtService } from '@nestjs/jwt';
@@ -14,8 +15,6 @@ jest.mock('bcrypt', () => ({
   compare: jest.fn(),
   hash: jest.fn(),
 }));
-
-import { hash } from 'bcrypt';
 
 describe('AuthController (e2e) - POST /auth/signup', () => {
   let app: INestApplication<App>;

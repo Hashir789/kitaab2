@@ -2,8 +2,8 @@ import { Logger } from '../logger/logger.service';
 import { EmailService } from '../email/email.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { TrackVisitorsDto, VisitorEmailsDto, VisitorMessagesDto } from './visitors.dto';
-import { VisitorEmailsQueryInterface, VisitorMessagesQueryInterface } from './visitors.interface';
+import { TrackVisitorsDto, VisitorAnalyticsDto, VisitorEmailsDto, VisitorMessagesDto } from './visitors.dto';
+import { AnalyticsAssociationResponse, AnalyticsSummaryResponse, AnalyticsTableResponse, VisitorEmailsQueryInterface, VisitorMessagesQueryInterface } from './visitors.interface';
 
 @Injectable()
 export class VisitorService {
@@ -38,99 +38,29 @@ export class VisitorService {
     }
   }
 
-  async visitorAnalytics(include = 'totals,timezone,visitors'): Promise<any> {
+  async visitorAnalytics(query: VisitorAnalyticsDto): Promise<AnalyticsSummaryResponse | AnalyticsAssociationResponse<any> | AnalyticsTableResponse<any>> {
     try {
       this.loggerService.log('visitorAnalytics {controller}');
-      const allowedIncludes = ['totals', 'timezone', 'visitors'];
-      const includes = include.split(',').map((value) => value.trim()).filter(Boolean);
-      const invalidInclude = includes.find((value) => !allowedIncludes.includes(value));
-      if (invalidInclude) {
-        this.loggerService.error('Invalid analytics include value', HttpStatus.BAD_REQUEST);
-        throw new HttpException('Invalid analytics include value', HttpStatus.BAD_REQUEST);
+      const { type, anonymous_id, page = 1, limit = 20 } = query;
+      switch (type) {
+        case 'summary':
+          return this.analyticsSummary();
+        case 'users_association':
+          return this.analyticsAssociation(this.requireAnonymousId(anonymous_id), 'users', 't.id, t.gender, t.dob, t.email_verified, t.two_factor_enabled, t.last_login_at, t.created_at');
+        case 'messages_association':
+          return this.analyticsAssociation(this.requireAnonymousId(anonymous_id), 'visitor_messages', 't.id, t.name, t.email, t.subject, t.phone, t.message, t.created_at');
+        case 'emails_association':
+          return this.analyticsAssociation(this.requireAnonymousId(anonymous_id), 'visitor_emails', 't.id, t.email, t.created_at');
+        case 'visitors_table':
+          return this.analyticsTable('visitors', 'last_visited DESC NULLS LAST, id DESC', page, limit);
+        case 'visitor_messages_table':
+          return this.analyticsTable('visitor_messages', 'created_at DESC, id DESC', page, limit);
+        case 'visitor_emails_table':
+          return this.analyticsTable('visitor_emails', 'created_at DESC, id DESC', page, limit);
+        default:
+          this.loggerService.error('Invalid analytics type', HttpStatus.BAD_REQUEST);
+          throw new HttpException('Invalid analytics type', HttpStatus.BAD_REQUEST);
       }
-      const analytics: any = {};
-
-      if (includes.includes('totals')) {
-        const [totals] = await this.postgresService.query<any>(`
-          SELECT
-            COUNT(*)::int AS visitors,
-            COALESCE(SUM(clicks), 0)::int AS clicks,
-            COALESCE(SUM(navigations), 0)::int AS navigations
-          FROM visitors;
-        `);
-        analytics.totals = {
-          visitors: Number(totals?.visitors ?? 0),
-          clicks: Number(totals?.clicks ?? 0),
-          navigations: Number(totals?.navigations ?? 0),
-        };
-      }
-
-      if (includes.includes('timezone')) {
-        const rows = await this.postgresService.query<any>(`
-          SELECT timezone, COUNT(*)::int AS count
-          FROM visitors
-          GROUP BY timezone
-          ORDER BY timezone;
-        `);
-        analytics.timezoneDistribution = rows.reduce((distribution, row) => {
-          distribution[row.timezone] = Number(row.count);
-          return distribution;
-        }, {});
-      }
-
-      if (includes.includes('visitors')) {
-        const rows = await this.postgresService.query<any>(`
-          SELECT
-            v.id,
-            v.anonymous_id,
-            v.timezone,
-            v.clicks,
-            v.navigations,
-            COALESCE(messages.visitor_messages, '[]'::json) AS visitor_messages,
-            COALESCE(emails.visitor_emails, '[]'::json) AS visitor_emails
-          FROM visitors v
-          LEFT JOIN LATERAL (
-            SELECT json_agg(
-              json_build_object(
-                'id', vm.id,
-                'name', vm.name,
-                'email', vm.email,
-                'subject', vm.subject,
-                'phone', vm.phone,
-                'message', vm.message,
-                'created_at', vm.created_at
-              )
-              ORDER BY vm.created_at DESC
-            ) AS visitor_messages
-            FROM visitor_messages vm
-            WHERE vm.visitor_id = v.id
-          ) messages ON true
-          LEFT JOIN LATERAL (
-            SELECT json_agg(
-              json_build_object(
-                'id', ve.id,
-                'email', ve.email,
-                'created_at', ve.created_at
-              )
-              ORDER BY ve.created_at DESC
-            ) AS visitor_emails
-            FROM visitor_emails ve
-            WHERE ve.visitor_id = v.id
-          ) emails ON true
-          ORDER BY v.last_visited DESC NULLS LAST, v.id DESC;
-        `);
-        analytics.visitors = rows.map((visitor) => ({
-          id: Number(visitor.id),
-          anonymous_id: visitor.anonymous_id,
-          timezone: visitor.timezone,
-          clicks: Number(visitor.clicks),
-          navigations: Number(visitor.navigations),
-          visitor_messages: visitor.visitor_messages ?? [],
-          visitor_emails: visitor.visitor_emails ?? [],
-        }));
-      }
-
-      return analytics;
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -188,5 +118,88 @@ export class VisitorService {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
+  }
+
+  // helper functions
+
+  private async analyticsSummary(): Promise<AnalyticsSummaryResponse> {
+    this.loggerService.log('analyticsSummary {helper}');
+    const [[totals], devices, timezones] = await Promise.all([
+      this.postgresService.query<{ clicks: number; navigations: number; visitors: number; visits: number }>(`
+        SELECT
+          COUNT(*)::int AS visitors,
+          COALESCE(SUM(clicks), 0)::int AS clicks,
+          COALESCE(SUM(navigations), 0)::int AS navigations,
+          COALESCE(SUM(number_of_visits), 0)::int AS visits
+        FROM visitors;
+      `),
+      this.postgresService.query<{ device_type: string; count: number }>(`
+        SELECT device_type, COUNT(*)::int AS count
+        FROM visitors
+        WHERE device_type IS NOT NULL
+        GROUP BY device_type
+        ORDER BY count DESC, device_type ASC;
+      `),
+      this.postgresService.query<{ timezone: string; count: number }>(`
+        SELECT timezone, COUNT(*)::int AS count
+        FROM visitors
+        WHERE timezone IS NOT NULL
+        GROUP BY timezone
+        ORDER BY count DESC, timezone ASC;
+      `)
+    ]);
+    return {
+      summary: {
+        clicks: Number(totals?.clicks ?? 0),
+        navigations: Number(totals?.navigations ?? 0),
+        visitors: Number(totals?.visitors ?? 0),
+        visits: Number(totals?.visits ?? 0)
+      },
+      device_distribution: devices.map((row) => ({ device_type: row.device_type, count: Number(row.count) })),
+      timezones: timezones.map((row) => ({ timezone: row.timezone, count: Number(row.count) }))
+    };
+  }
+
+  private requireAnonymousId(anonymous_id?: string): string {
+    this.loggerService.log('requireAnonymousId {helper}');
+    if (!anonymous_id) {
+      this.loggerService.error('anonymous_id is required for association queries', HttpStatus.BAD_REQUEST);
+      throw new HttpException('anonymous_id is required for association queries', HttpStatus.BAD_REQUEST);
+    }
+    return anonymous_id;
+  }
+
+  private async analyticsAssociation(anonymous_id: string, table: 'users' | 'visitor_messages' | 'visitor_emails', columns: string): Promise<AnalyticsAssociationResponse<any>> {
+    this.loggerService.log(`analyticsAssociation {helper} table=${table} anonymous_id=${anonymous_id}`);
+    const rows = await this.postgresService.query<any>(`
+      SELECT ${columns}
+      FROM ${table} t
+      JOIN visitors v ON v.id = t.visitor_id
+      WHERE v.anonymous_id = $1
+      ORDER BY t.id ASC;
+    `, [anonymous_id]);
+    return { anonymous_id, details: rows };
+  }
+
+  private async analyticsTable(table: 'visitors' | 'visitor_messages' | 'visitor_emails', orderBy: string, page: number, limit: number): Promise<AnalyticsTableResponse<any>> {
+    this.loggerService.log(`analyticsTable {helper} table=${table} page=${page} limit=${limit}`);
+    const offset = (page - 1) * limit;
+    const [rows, [totals]] = await Promise.all([
+      this.postgresService.query<any>(`
+        SELECT *
+        FROM ${table}
+        ORDER BY ${orderBy}
+        LIMIT $1 OFFSET $2;
+      `, [limit, offset]),
+      this.postgresService.query<{ total: number }>(`
+        SELECT COUNT(*)::int AS total FROM ${table};
+      `)
+    ]);
+    return {
+      rows,
+      total: Number(totals?.total ?? 0),
+      page,
+      limit
+    };
   }
 }

@@ -1,4 +1,5 @@
 import request from 'supertest';
+import { compare } from 'bcrypt';
 import { App } from 'supertest/types';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from '../../src/app/app.module';
@@ -12,8 +13,6 @@ jest.mock('bcrypt', () => ({
   compare: jest.fn(),
   hash: jest.fn(),
 }));
-
-import { compare } from 'bcrypt';
 
 describe('AuthController (e2e) - POST /auth/otp-verify', () => {
   let app: INestApplication<App>;

@@ -1,4 +1,46 @@
-import { IsIn, IsNotEmpty, IsString, Min, IsInt, IsOptional, MinLength, IsEmail } from 'class-validator';
+import { Type } from 'class-transformer';
+import { IsIn, IsNotEmpty, IsString, Min, Max, IsInt, IsOptional, MinLength, IsEmail } from 'class-validator';
+
+export type VisitorAnalyticsType =
+  | 'summary'
+  | 'users_association'
+  | 'messages_association'
+  | 'emails_association'
+  | 'visitors_table'
+  | 'visitor_messages_table'
+  | 'visitor_emails_table';
+
+export class VisitorAnalyticsDto {
+  @IsString()
+  @IsIn([
+    'summary',
+    'users_association',
+    'messages_association',
+    'emails_association',
+    'visitors_table',
+    'visitor_messages_table',
+    'visitor_emails_table'
+  ])
+  type: VisitorAnalyticsType;
+
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  anonymous_id?: string;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @IsOptional()
+  page?: number;
+
+  @Type(() => Number)
+  @IsInt()
+  @Min(1)
+  @Max(100)
+  @IsOptional()
+  limit?: number;
+}
 
 export class TrackVisitorsDto {
   @IsString()
