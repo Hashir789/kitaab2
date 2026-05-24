@@ -13,6 +13,7 @@ export class JwtAuthGuard implements CanActivate {
     '/health-check',
     '/visitors/track',
     '/visitors/email',
+    '/users/analytics',
     '/auth/otp-verify',
     '/visitors/message',
     '/auth/resend-link',

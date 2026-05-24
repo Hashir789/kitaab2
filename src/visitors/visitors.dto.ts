@@ -29,14 +29,14 @@ export class VisitorAnalyticsDto {
   anonymous_id?: string;
 
   @Type(() => Number)
-  @IsInt()
   @Min(1)
+  @IsInt()
   @IsOptional()
   page?: number;
 
   @Type(() => Number)
-  @IsInt()
   @Min(1)
+  @IsInt()
   @Max(100)
   @IsOptional()
   limit?: number;
