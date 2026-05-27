@@ -1,26 +1,32 @@
 import { Type } from 'class-transformer';
-import { IsIn, IsInt, IsOptional, IsString, Max, Min } from 'class-validator';
+import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
 
 export type UserAnalyticsType =
   | 'users_table'
   | 'gender_ratio'
-  | 'age_distribution';
+  | 'age_distribution'
+  | 'visitors_association';
 
 export class UserAnalyticsDto {
   @IsString()
-  @IsIn(['users_table', 'gender_ratio', 'age_distribution'])
+  @IsIn(['users_table', 'gender_ratio', 'age_distribution', 'visitors_association'])
   type: UserAnalyticsType;
 
-  @Type(() => Number)
+  @IsString()
+  @IsNotEmpty()
+  @IsOptional()
+  anonymous_id?: string;
+
   @Min(1)
   @IsInt()
   @IsOptional()
+  @Type(() => Number)
   page?: number;
 
-  @Type(() => Number)
   @Min(1)
   @IsInt()
   @Max(100)
   @IsOptional()
+  @Type(() => Number)
   limit?: number;
 }

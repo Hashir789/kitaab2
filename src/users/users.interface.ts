@@ -1,5 +1,16 @@
-export interface UserTableResponse<T> {
-  rows: T[];
+export interface UserTableRow {
+  id: number;
+  visitor_id: number;
+  gender: string;
+  dob: Date;
+  email_verified: boolean;
+  two_factor_enabled: boolean;
+  last_login_at: Date;
+  created_at: Date;
+};
+
+export interface UserTableResponse {
+  rows: UserTableRow[];
   total: number;
   page: number;
   limit: number;
@@ -13,4 +24,20 @@ export interface GenderRatioResponse {
 export interface AgeDistributionResponse {
   total: number;
   distribution: Array<{ age: number; count: number }>;
+};
+
+export interface VisitorAssociationRow {
+  id: number;
+  anonymous_id: string;
+  timezone: string;
+  device_type: 'desktop' | 'tablet' | 'mobile';
+  clicks: number;
+  navigations: number;
+  number_of_visits: number;
+  last_visited: Date;
+};
+
+export interface VisitorsAssociationResponse {
+  anonymous_id: string;
+  details: VisitorAssociationRow[];
 };

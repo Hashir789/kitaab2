@@ -2,7 +2,7 @@ import { UserAnalyticsDto } from './users.dto';
 import { Logger } from '../logger/logger.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { AgeDistributionResponse, GenderRatioResponse, UserTableResponse } from './users.interface';
+import { AgeDistributionResponse, GenderRatioResponse, UserTableResponse, UserTableRow, VisitorAssociationRow, VisitorsAssociationResponse } from './users.interface';
 
 @Injectable()
 export class UsersService {
@@ -14,14 +14,14 @@ export class UsersService {
 
   // controller functions
 
-  async userAnalytics(query: UserAnalyticsDto): Promise<UserTableResponse<any> | GenderRatioResponse | AgeDistributionResponse> {
+  async userAnalytics(query: UserAnalyticsDto): Promise<UserTableResponse | GenderRatioResponse | AgeDistributionResponse | VisitorsAssociationResponse> {
     try {
       this.loggerService.log('userAnalytics {controller}');
-      const { type, page = 1, limit = 20 } = query;
+      const { type, anonymous_id, page = 1, limit = 20 } = query;
       if (type === 'users_table') {
         const offset = (page - 1) * limit;
         const [rows, [totals]] = await Promise.all([
-          this.postgresService.query<any>(`
+          this.postgresService.query<UserTableRow>(`
             SELECT id, visitor_id, gender, dob, email_verified, two_factor_enabled, last_login_at, created_at
             FROM users
             ORDER BY created_at DESC, id DESC
@@ -63,6 +63,20 @@ export class UsersService {
           total,
           distribution: rows.map((row) => ({ age: Number(row.age), count: Number(row.count) }))
         };
+      }
+      if (type === 'visitors_association') {
+        if (!anonymous_id) {
+          this.loggerService.error('anonymous_id is required for visitors_association', HttpStatus.BAD_REQUEST);
+          throw new HttpException('anonymous_id is required for visitors_association', HttpStatus.BAD_REQUEST);
+        }
+        const rows = await this.postgresService.query<VisitorAssociationRow>(`
+          SELECT v.id, v.anonymous_id, v.timezone, v.device_type, v.clicks, v.navigations, v.number_of_visits, v.last_visited
+          FROM visitors v
+          JOIN users u ON u.visitor_id = v.id
+          WHERE v.anonymous_id = $1
+          ORDER BY v.id ASC;
+        `, [anonymous_id]);
+        return { anonymous_id, details: rows };
       }
       this.loggerService.error('Invalid user analytics type', HttpStatus.BAD_REQUEST);
       throw new HttpException('Invalid user analytics type', HttpStatus.BAD_REQUEST);
