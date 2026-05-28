@@ -12,10 +12,11 @@ export class UserAnalyticsDto {
   @IsIn(['users_table', 'gender_ratio', 'age_distribution', 'visitors_association'])
   type: UserAnalyticsType;
 
-  @IsString()
+  @IsInt()
   @IsNotEmpty()
   @IsOptional()
-  anonymous_id?: string;
+  @Type(() => Number)
+  id?: string;
 
   @Min(1)
   @IsInt()

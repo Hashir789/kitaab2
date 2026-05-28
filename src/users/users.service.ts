@@ -17,7 +17,7 @@ export class UsersService {
   async userAnalytics(query: UserAnalyticsDto): Promise<UserTableResponse | GenderRatioResponse | AgeDistributionResponse | VisitorsAssociationResponse> {
     try {
       this.loggerService.log('userAnalytics {controller}');
-      const { type, anonymous_id, page = 1, limit = 20 } = query;
+      const { type, id, page = 1, limit = 20 } = query;
       if (type === 'users_table') {
         const offset = (page - 1) * limit;
         const [rows, [totals]] = await Promise.all([
@@ -65,18 +65,16 @@ export class UsersService {
         };
       }
       if (type === 'visitors_association') {
-        if (!anonymous_id) {
-          this.loggerService.error('anonymous_id is required for visitors_association', HttpStatus.BAD_REQUEST);
-          throw new HttpException('anonymous_id is required for visitors_association', HttpStatus.BAD_REQUEST);
+        if (!id) {
+          this.loggerService.error('id is required for visitors_association', HttpStatus.BAD_REQUEST);
+          throw new HttpException('id is required for visitors_association', HttpStatus.BAD_REQUEST);
         }
         const rows = await this.postgresService.query<VisitorAssociationRow>(`
-          SELECT v.id, v.anonymous_id, v.timezone, v.device_type, v.clicks, v.navigations, v.number_of_visits, v.last_visited
-          FROM visitors v
-          JOIN users u ON u.visitor_id = v.id
-          WHERE v.anonymous_id = $1
-          ORDER BY v.id ASC;
-        `, [anonymous_id]);
-        return { anonymous_id, details: rows };
+          SELECT id, anonymous_id, timezone, device_type, clicks, navigations, number_of_visits, last_visited
+          FROM visitors
+          WHERE id = $1;
+        `, [id]);
+        return { id, details: rows };
       }
       this.loggerService.error('Invalid user analytics type', HttpStatus.BAD_REQUEST);
       throw new HttpException('Invalid user analytics type', HttpStatus.BAD_REQUEST);

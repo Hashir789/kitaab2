@@ -38,6 +38,6 @@ export interface VisitorAssociationRow {
 };
 
 export interface VisitorsAssociationResponse {
-  anonymous_id: string;
+  id: string;
   details: VisitorAssociationRow[];
 };
