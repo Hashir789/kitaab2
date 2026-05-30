@@ -24,7 +24,13 @@ async function bootstrap(): Promise<void> {
   );
   app.useGlobalGuards(new JwtAuthGuard(logger, app.get(JwtService), app.get(ConfigService)));
   app.enableCors({
-    origin: '*',
+    origin: [
+      'http://localhost:3000',
+      'https://www.kitaab.me',
+      'https://staging.kitaab.me',
+      'https://backoffice.kitaab.me'
+    ],
+    credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
