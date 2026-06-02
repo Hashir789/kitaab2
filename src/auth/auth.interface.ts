@@ -103,6 +103,14 @@ export interface signupInsertQueryInterface {
   email_verified: boolean;
 }
 
+export interface RefreshTokenResult {
+  access_token: string;
+}
+
+export interface RefreshTokenQueryInterface {
+  email_verified: boolean;
+}
+
 export interface Update2FaGetQueryInterface {
   email_verified: boolean;
 }

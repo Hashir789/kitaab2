@@ -1,7 +1,7 @@
 import { AuthService } from './auth.service';
 import type { AuthenticatedRequest } from './auth.interface';
-import { loginResult, EmailVerifyResult, SignupResult } from './auth.interface';
-import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
+import { loginResult, EmailVerifyResult, SignupResult, RefreshTokenResult } from './auth.interface';
+import { Controller, Post, Get, Patch, Body, Query, Req, Headers, HttpCode, HttpStatus } from '@nestjs/common';
 import { ChangePasswordDto, EmailVerifyQueryDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
 
 @Controller('auth')
@@ -13,6 +13,12 @@ export class AuthController {
   @HttpCode(HttpStatus.CREATED)
   async signup(@Body() body: SignupDto): Promise<SignupResult> {
     return this.authService.signup(body);
+  }
+
+  @Post('refresh-token')
+  @HttpCode(HttpStatus.OK)
+  async refreshToken(@Headers('authorization') authHeader: string): Promise<RefreshTokenResult> {
+    return this.authService.refreshToken(authHeader);
   }
 
   @Post('login')
