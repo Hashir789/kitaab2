@@ -10,7 +10,7 @@ import { EncryptionService } from '../encryption/encryption.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
-import { JwtAuthUser, loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface, RefreshTokenResult, RefreshTokenQueryInterface, SignupResult } from './auth.interface';
+import { loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface, SignupResult } from './auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -68,40 +68,6 @@ export class AuthService {
     }
   }
 
-  async refreshToken(authHeader: string | undefined): Promise<RefreshTokenResult> {
-    try {
-      this.loggerService.log('refreshToken {controller}');
-      if (!authHeader?.startsWith('Bearer ')) {
-        this.loggerService.error('Authorization header not found or malformed', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('Authorization header not found or malformed', HttpStatus.UNAUTHORIZED);
-      }
-      const token = authHeader.split(' ')[1];
-      const publicKey = this.configService.get<string>('JWT_PUBLIC_KEY') ?? '';
-      const payload = (await this.jwtService.verifyAsync(token, { publicKey, algorithms: ['RS256'] }).catch(() => {
-        throw new HttpException('Invalid or expired token', HttpStatus.UNAUTHORIZED);
-      })) as JwtAuthUser;
-      if (payload?.type !== 'access') {
-        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
-      }
-      const { sub: user_id, email } = payload;
-      const email_hmac = this.encryptionService.hmacEmail(email);
-      const rows = await this.postgresService.query<RefreshTokenQueryInterface>(`
-        SELECT email_verified FROM users WHERE id = $1 AND email = $2
-      `, [user_id, email_hmac]);
-      if (!rows?.length) {
-        this.loggerService.error('User not found', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('User not found', HttpStatus.UNAUTHORIZED);
-      }
-      const { email_verified } = rows[0];
-      const access_token = await this.jwtService.signAsync({ sub: user_id, email, type: 'access', email_verified });
-      return { access_token };
-    } catch (error) {
-      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
-      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
   async login(payload: LoginDto): Promise<loginResult> {
     try {
       this.loggerService.log('login {controller}');
@@ -136,7 +102,7 @@ export class AuthService {
     }
   }
 
-  async otpVerify(payload: OtpVerifyDto): Promise<void> {
+  async otpVerify(payload: OtpVerifyDto): Promise<OtpVerifyResult | void> {
     try {
       this.loggerService.log('otpVerify {controller}');
       const { email, otp } = payload;
@@ -148,14 +114,17 @@ export class AuthService {
         this.loggerService.error('Invalid or expired code', HttpStatus.BAD_REQUEST);
         throw new HttpException('Invalid or expired code', HttpStatus.BAD_REQUEST);
       }
-      const updated = await this.postgresService.query<otpVerifyQueryInterface>(`
-        UPDATE users SET email_verified = TRUE WHERE email = $1 RETURNING email_verified
+      const rows = await this.postgresService.query<otpVerifyQueryInterface>(`
+        UPDATE users SET email_verified = TRUE
+        WHERE email = $1 AND email_verified = FALSE
+        RETURNING id
       `, [email_hmac]);
-      if (!updated?.length) {
-        this.loggerService.error('Invalid or expired code', HttpStatus.BAD_REQUEST);
-        throw new HttpException('Invalid or expired code', HttpStatus.BAD_REQUEST);
-      }
       await this.redisService.del(redis_key);
+      if (rows?.length) {
+        const { id } = rows[0];
+        const access_token = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified: true });
+        return { access_token };
+      }
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

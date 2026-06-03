@@ -67,7 +67,11 @@ export interface loginQueryInterface {
 }
 
 export interface otpVerifyQueryInterface {
-  email_verified: boolean;
+  id: number;
+}
+
+export interface OtpVerifyResult {
+  access_token: string;
 }
 
 export interface resendLinkGetQueryInterface {
@@ -100,14 +104,6 @@ export interface SignupResult {
 export interface signupInsertQueryInterface {
   id: number;
   created_at: Date;
-  email_verified: boolean;
-}
-
-export interface RefreshTokenResult {
-  access_token: string;
-}
-
-export interface RefreshTokenQueryInterface {
   email_verified: boolean;
 }
 
