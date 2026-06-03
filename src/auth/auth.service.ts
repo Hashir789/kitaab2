@@ -143,11 +143,6 @@ export class AuthService {
         this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
         throw new HttpException('User not found', HttpStatus.NOT_FOUND);
       }
-      const { email_verified } = rows[0];
-      if (email_verified) {
-        this.loggerService.error('Email already verified', HttpStatus.BAD_REQUEST);
-        throw new HttpException('Email already verified', HttpStatus.BAD_REQUEST);
-      }
       const otp = this.generateOtp();
       const expires_in_minutes = Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES'));
       await this.storeOtpHash({ email_hmac, otp, expires_in_minutes });
