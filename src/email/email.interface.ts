@@ -8,7 +8,6 @@ export interface SendOtpVerificationEmailBody {
 export interface SendPasswordResetEmailBody {
   email: string;
   full_name: string;
-  plain_token?: string;
   reset_link: string | null;
   expires_in_minutes: number;
 }

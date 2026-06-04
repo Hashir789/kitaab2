@@ -42,7 +42,7 @@ export class EmailService {
 
   async sendPasswordResetEmail(body: SendPasswordResetEmailBody): Promise<void> {
     this.loggerService.log('sendPasswordResetEmail {helper}');
-    const { email, full_name, reset_link, plain_token, expires_in_minutes } = body;
+    const { email, full_name, reset_link, expires_in_minutes } = body;
     const template_path = join(process.cwd(), 'src', 'templates', 'password-reset.html');
     const template = await readFile(template_path, 'utf-8');
     let reset_action: string;
@@ -52,12 +52,6 @@ export class EmailService {
          style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;color:#f0f0f0;background-color:#646464;">
         Reset password
       </a>`;
-    } else if (plain_token) {
-      reset_action = `
-      <p style="margin:0 0 10px 0;font-size:13px;color:#787878;">Use this token with the password reset step before it expires:</p>
-      <p style="margin:0;padding:12px 16px;font-size:14px;font-weight:600;word-break:break-all;border-radius:8px;border:1px solid #e6e6e6;background-color:#ffffff;font-family:ui-monospace,Menlo,Consolas,monospace;color:#5a5a5a;">
-        ${plain_token}
-      </p>`;
     } else {
       reset_action =
         '<p style="margin:0;font-size:13px;color:#787878;">If you still need access, try requesting another reset from the app.</p>';

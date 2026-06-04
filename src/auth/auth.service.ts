@@ -170,14 +170,12 @@ export class AuthService {
       const ttl_seconds = Number(this.configService.get<string>('PASSWORD_RESET_EXPIRES_IN_SECONDS')) || 3600;
       await this.redisService.set(`password-reset:${token}`, String(id), ttl_seconds);
       const base_url = this.configService.get<string>('PASSWORD_RESET_URL_BASE')?.replace(/\/$/, '');
-      const reset_link = base_url ? `${base_url}?token=${encodeURIComponent(token)}` : null;
       const expires_in_minutes = Math.max(1, Math.ceil(ttl_seconds / 60));
       await this.emailService.sendPasswordResetEmail({
         email,
         full_name,
-        reset_link,
         expires_in_minutes,
-        plain_token: reset_link ? undefined : token
+        reset_link: `${base_url}?token=${encodeURIComponent(token)}`
       });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
