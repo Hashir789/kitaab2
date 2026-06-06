@@ -29,7 +29,7 @@ export class EmailService {
     const template_path = join(process.cwd(), 'src', 'templates', 'otp-verification.html');
     const template = await readFile(template_path, 'utf-8');
     const html = template
-      .replaceAll('{{name}}', full_name)
+      .replaceAll('{{greeting}}', full_name ? `Hi ${full_name},` : 'Hi,')
       .replaceAll('{{expiresInMinutes}}', String(expires_in_minutes))
       .replaceAll('{{otp}}', otp);
     await this.transporter.sendMail({

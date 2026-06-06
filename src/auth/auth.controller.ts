@@ -1,6 +1,6 @@
 import { AuthService } from './auth.service';
 import type { AuthenticatedRequest } from './auth.interface';
-import { loginResult, EmailVerifyResult, SignupResult, OtpVerifyResult } from './auth.interface';
+import { loginResult, EmailVerifyResult, OtpVerifyResult, MeResult } from './auth.interface';
 import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ChangePasswordDto, EmailVerifyQueryDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
 
@@ -10,9 +10,9 @@ export class AuthController {
   constructor(private readonly authService: AuthService) {}
 
   @Post('signup')
-  @HttpCode(HttpStatus.CREATED)
-  async signup(@Body() body: SignupDto): Promise<SignupResult> {
-    return this.authService.signup(body);
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async signup(@Body() body: SignupDto): Promise<void> {
+    await this.authService.signup(body);
   }
 
   @Post('login')
@@ -31,6 +31,12 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async otpVerify(@Body() body: OtpVerifyDto): Promise<OtpVerifyResult | void> {
     return this.authService.otpVerify(body);
+  }
+
+  @Get('me')
+  @HttpCode(HttpStatus.OK)
+  async me(@Req() req: AuthenticatedRequest): Promise<MeResult> {
+    return this.authService.getMe(req);
   }
 
   @Post('resend-link')

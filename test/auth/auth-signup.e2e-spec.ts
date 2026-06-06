@@ -275,22 +275,8 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('-> 500 mapped when jwt access sign throws', async () => {
-    postgresQueryMock.mockResolvedValueOnce([insertedRow]);
-    jwtSignAsyncMock.mockRejectedValueOnce(new Error('jwt boom'));
-
-    await request(app.getHttpServer())
-      .post('/auth/signup')
-      .send(validPayload)
-      .expect(500);
-
-    expect(redisSetMock).not.toHaveBeenCalled();
-    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
-  });
-
   it('-> 500 mapped when redis.set throws', async () => {
     postgresQueryMock.mockResolvedValueOnce([insertedRow]);
-    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
     redisSetMock.mockRejectedValueOnce(new Error('redis boom'));
 
     await request(app.getHttpServer())
@@ -303,7 +289,6 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
 
   it('-> 500 mapped when email send throws', async () => {
     postgresQueryMock.mockResolvedValueOnce([insertedRow]);
-    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
     redisSetMock.mockResolvedValueOnce(undefined);
     sendOtpVerificationEmailMock.mockRejectedValueOnce(new Error('smtp boom'));
 
@@ -313,42 +298,23 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
       .expect(500);
   });
 
-  it('-> 201 returns vault material, hashes OTP into Redis, sends verification email on happy path', async () => {
+  it('-> 204 hashes OTP into Redis, sends verification email and returns no body on happy path', async () => {
     postgresQueryMock.mockResolvedValueOnce([insertedRow]);
-    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
     redisSetMock.mockResolvedValue(undefined);
     sendOtpVerificationEmailMock.mockResolvedValue(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/signup')
       .send(validPayload)
-      .expect(201)
-      .expect((res) => {
-        expect(res.body).toEqual({
-          dob: validPayload.dob,
-          gender: validPayload.gender,
-          email: 'email-hmac',
-          full_name: 'encrypted-full-name',
-          key_salt: 'key-salt',
-          key_iv: 'key-iv',
-          encrypted_master_key: 'encrypted-master-key',
-          access_token: 'access-token',
-          created_at: insertedRow.created_at.toISOString(),
-        });
-      });
+      .expect(204)
+      .expect('');
 
     expect(hash as unknown as jest.Mock).toHaveBeenCalledWith(
       'password123' + 'pepper',
       12,
     );
 
-    expect(jwtSignAsyncMock).toHaveBeenCalledTimes(1);
-    expect(jwtSignAsyncMock).toHaveBeenCalledWith({
-      sub: insertedRow.id,
-      email: validPayload.email,
-      type: 'access',
-      email_verified: insertedRow.email_verified,
-    });
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
 
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
     const insertCall = postgresQueryMock.mock.calls[0];

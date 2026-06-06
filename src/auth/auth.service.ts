@@ -10,7 +10,7 @@ import { EncryptionService } from '../encryption/encryption.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
-import { loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface, SignupResult } from './auth.interface';
+import { loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface, MeResult, MeQueryInterface } from './auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -27,7 +27,7 @@ export class AuthService {
 
   // Controller functions
 
-  async signup(payload: SignupDto): Promise<SignupResult> {
+  async signup(payload: SignupDto): Promise<void> {
     try {
       this.loggerService.log('signup {controller}');
       const { anonymous_id, full_name, email, password, gender, dob, recovery_key } = payload;
@@ -50,18 +50,15 @@ export class AuthService {
         WHERE v.anonymous_id = $12
         ON CONFLICT (email)
         DO NOTHING
-        RETURNING id, email_verified, created_at;
+        RETURNING id;
       `, [ email_hmac, passwordHash, full_name_encrypted, gender, dob, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key, anonymous_id ]);
       if (!rows?.length) {
         this.loggerService.error('User already exists', HttpStatus.NOT_FOUND);
         throw new HttpException('User already exists', HttpStatus.NOT_FOUND);
       }
-      const { id, email_verified, created_at } = rows[0];
-      const access_token = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified });
       const otp = this.generateOtp();
       await this.storeOtpHash({ email_hmac, otp, expires_in_minutes });
       await this.emailService.sendOtpVerificationEmail({ email, full_name, otp, expires_in_minutes });
-      return { dob, gender, created_at, access_token, email: email_hmac, full_name: full_name_encrypted, key_salt, key_iv, encrypted_master_key };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -75,16 +72,20 @@ export class AuthService {
       const pepper = this.configService.get<string>('PASSWORD_PEPPER');
       const email_hmac = this.encryptionService.hmacEmail(mail);
       const rows = await this.postgresService.query<loginQueryInterface>(`
-        SELECT id, password_hash, full_name, email, gender, dob, created_at, two_factor_enabled, email_verified, key_salt, key_iv, encrypted_master_key
+        SELECT id, password_hash, two_factor_enabled, email_verified
         FROM users WHERE email = $1
       `, [email_hmac]);
       if (!rows?.length) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
-      const { id, password_hash, dob, gender, full_name, created_at, two_factor_enabled, email_verified, key_salt, key_iv, encrypted_master_key } = rows[0];
+      const { id, password_hash, two_factor_enabled, email_verified } = rows[0];
       const hash_password = await compare(password + pepper, password_hash);
       if (!hash_password) {
+        this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
+      }
+      if (!email_verified) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
@@ -94,8 +95,7 @@ export class AuthService {
         FROM visitors v
         WHERE u.id = $1 AND v.anonymous_id = $2
       `, [id, anonymous_id]);
-      const access_token = await this.jwtService.signAsync({ sub: id, email: mail, type: 'access', email_verified });
-      return { dob, email: email_hmac, gender, full_name, key_salt, key_iv, encrypted_master_key, created_at, email_verified, two_factor_enabled, access_token };
+      return { two_factor_enabled };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -287,6 +287,30 @@ export class AuthService {
       `, [email_hmac]);
       return !rows?.length ? { verified: null }: { verified: rows[0].email_verified };  
     } catch(error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async getMe(req: AuthenticatedRequest): Promise<MeResult> {
+    try {
+      this.loggerService.log('getMe {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      const rows = await this.postgresService.query<MeQueryInterface>(`
+        SELECT id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at
+        FROM users WHERE id = $1
+      `, [user_id]);
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const { id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at } = rows[0];
+      return { id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at };
+    } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }

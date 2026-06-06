@@ -162,7 +162,7 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
       .expect(500);
   });
 
-  it('-> 200 and sends email with plainToken when reset URL not configured', async () => {
+  it('-> 204 and sends email with bare token query when reset URL not configured', async () => {
     postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
     redisSetMock.mockResolvedValue(undefined);
     sendPasswordResetEmailMock.mockResolvedValue(undefined);
@@ -184,14 +184,13 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
       expect.objectContaining({
         email: 'muhammad@example.com',
         full_name: 'Muhammad',
-        reset_link: null,
-        plain_token: expect.any(String),
+        reset_link: expect.stringMatching(/^\?token=[a-f0-9]{64}$/),
         expires_in_minutes: 60,
       }),
     );
   });
 
-  it('-> 200 and sends email with resetLink when reset URL configured', async () => {
+  it('-> 204 and sends email with resetLink when reset URL configured', async () => {
     await app.close();
     await setupApp({ PASSWORD_RESET_URL_BASE: 'https://app.example.com/reset' });
 
@@ -211,7 +210,6 @@ describe('AuthController (e2e) - POST /auth/forgot-password', () => {
         reset_link: expect.stringMatching(
           /^https:\/\/app\.example\.com\/reset\?token=[a-f0-9]{64}$/,
         ),
-        plain_token: undefined,
         expires_in_minutes: 60,
       }),
     );

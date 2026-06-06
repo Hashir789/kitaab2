@@ -33,16 +33,8 @@ describe('AuthController (e2e) - POST /auth/login', () => {
   const userRow = {
     id: 1,
     password_hash: 'stored-hash',
-    full_name: 'encrypted-full-name',
-    email: 'email-hmac',
-    gender: 'male',
-    dob: '2000-01-01',
-    created_at: new Date('2026-01-01T00:00:00.000Z'),
     two_factor_enabled: false,
     email_verified: true,
-    key_salt: 'key-salt',
-    key_iv: 'key-iv',
-    encrypted_master_key: 'encrypted-master-key',
   };
 
   beforeEach(async () => {
@@ -214,6 +206,19 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 
+  it('-> 401 when email not verified', async () => {
+    postgresQueryMock.mockResolvedValueOnce([{ ...userRow, email_verified: false }]);
+    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+
+    await request(app.getHttpServer())
+      .post('/auth/login')
+      .send(validPayload)
+      .expect(401);
+
+    expect(postgresQueryMock).toHaveBeenCalledTimes(1);
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+  });
+
   it('-> 500 mapped when select throws', async () => {
     postgresQueryMock.mockRejectedValueOnce(new Error('db down'));
 
@@ -251,25 +256,11 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('-> 500 mapped when jwt sign throws', async () => {
+  it('-> 200 and returns only two_factor_enabled on happy path', async () => {
     postgresQueryMock
       .mockResolvedValueOnce([userRow])
       .mockResolvedValueOnce([]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
-    jwtSignAsyncMock.mockRejectedValueOnce(new Error('jwt boom'));
-
-    await request(app.getHttpServer())
-      .post('/auth/login')
-      .send(validPayload)
-      .expect(500);
-  });
-
-  it('-> 200 and returns access token + vault material on happy path', async () => {
-    postgresQueryMock
-      .mockResolvedValueOnce([userRow])
-      .mockResolvedValueOnce([]);
-    (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
-    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
 
     await request(app.getHttpServer())
       .post('/auth/login')
@@ -277,28 +268,12 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       .expect(200)
       .expect((res) => {
         expect(res.body).toEqual({
-          dob: userRow.dob,
-          email: userRow.email,
-          gender: userRow.gender,
-          full_name: userRow.full_name,
-          key_salt: userRow.key_salt,
-          key_iv: userRow.key_iv,
-          encrypted_master_key: userRow.encrypted_master_key,
-          created_at: userRow.created_at.toISOString(),
-          email_verified: userRow.email_verified,
           two_factor_enabled: userRow.two_factor_enabled,
-          access_token: 'access-token',
         });
       });
 
     expect(compare).toHaveBeenCalledWith('password123' + 'pepper', 'stored-hash');
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
-    expect(jwtSignAsyncMock).toHaveBeenCalledTimes(1);
-    expect(jwtSignAsyncMock).toHaveBeenCalledWith({
-      sub: userRow.id,
-      email: validPayload.email,
-      type: 'access',
-      email_verified: userRow.email_verified,
-    });
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 });

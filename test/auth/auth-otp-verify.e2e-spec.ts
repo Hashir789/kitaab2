@@ -1,6 +1,7 @@
 import request from 'supertest';
 import { compare } from 'bcrypt';
 import { App } from 'supertest/types';
+import { JwtService } from '@nestjs/jwt';
 import { ConfigService } from '@nestjs/config';
 import { AppModule } from '../../src/app/app.module';
 import { Test, TestingModule } from '@nestjs/testing';
@@ -17,18 +18,20 @@ jest.mock('bcrypt', () => ({
 describe('AuthController (e2e) - POST /auth/otp-verify', () => {
   let app: INestApplication<App>;
 
-  const postgresQueryMock = jest.fn();
   const redisGetMock = jest.fn();
   const redisDelMock = jest.fn();
   const hmacEmailMock = jest.fn();
+  const jwtSignAsyncMock = jest.fn();
+  const postgresQueryMock = jest.fn();
 
   const validPayload = { email: 'muhammad@example.com', otp: '1234' };
 
   beforeEach(async () => {
-    postgresQueryMock.mockReset();
     redisGetMock.mockReset();
     redisDelMock.mockReset();
     hmacEmailMock.mockReset();
+    jwtSignAsyncMock.mockReset();
+    postgresQueryMock.mockReset();
     (compare as unknown as jest.Mock).mockReset();
 
     hmacEmailMock.mockReturnValue('email-hmac');
@@ -47,6 +50,11 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
         get: redisGetMock,
         del: redisDelMock,
         ping: jest.fn(),
+      })
+      .overrideProvider(JwtService)
+      .useValue({
+        signAsync: jwtSignAsyncMock,
+        verifyAsync: jest.fn(),
       })
       .overrideProvider(ConfigService)
       .useValue({
@@ -163,17 +171,20 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
     expect(redisDelMock).not.toHaveBeenCalled();
   });
 
-  it('-> 400 when UPDATE returns no rows (user vanished)', async () => {
+  it('-> 200 with empty body and deletes redis key when UPDATE returns no rows (already verified)', async () => {
     redisGetMock.mockResolvedValueOnce('stored-otp-hash');
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
     postgresQueryMock.mockResolvedValueOnce([]);
+    redisDelMock.mockResolvedValueOnce(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/otp-verify')
       .send(validPayload)
-      .expect(400);
+      .expect(200)
+      .expect('');
 
-    expect(redisDelMock).not.toHaveBeenCalled();
+    expect(redisDelMock).toHaveBeenCalledWith('otp:email-hmac');
+    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 
   it('-> 500 mapped when redis.get throws', async () => {
@@ -212,17 +223,20 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
     expect(redisDelMock).not.toHaveBeenCalled();
   });
 
-  it('-> 204 and verifies email + deletes redis key on happy path', async () => {
+  it('-> 200 and verifies email + returns access token + deletes redis key on happy path', async () => {
     redisGetMock.mockResolvedValueOnce('stored-otp-hash');
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
-    postgresQueryMock.mockResolvedValueOnce([{ email_verified: true }]);
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
+    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
     redisDelMock.mockResolvedValueOnce(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/otp-verify')
       .send(validPayload)
-      .expect(204)
-      .expect('');
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toEqual({ access_token: 'access-token' });
+      });
 
     expect(redisGetMock).toHaveBeenCalledWith('otp:email-hmac');
     expect(compare).toHaveBeenCalledWith(validPayload.otp, 'stored-otp-hash');
@@ -230,6 +244,12 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
     const updateCall = postgresQueryMock.mock.calls[0];
     expect(updateCall[0]).toMatch(/UPDATE users SET email_verified = TRUE/);
     expect(updateCall[1]).toEqual(['email-hmac']);
+    expect(jwtSignAsyncMock).toHaveBeenCalledWith({
+      sub: 1,
+      email: validPayload.email,
+      type: 'access',
+      email_verified: true,
+    });
     expect(redisDelMock).toHaveBeenCalledWith('otp:email-hmac');
   });
 });

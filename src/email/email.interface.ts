@@ -1,7 +1,7 @@
 export interface SendOtpVerificationEmailBody {
   otp: string;
   email: string;
-  full_name: string;
+  full_name?: string;
   expires_in_minutes: number;
 }
 

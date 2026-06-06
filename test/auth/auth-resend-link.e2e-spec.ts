@@ -126,17 +126,19 @@ describe('AuthController (e2e) - POST /auth/resend-link', () => {
     expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
   });
 
-  it('-> 400 when email already verified', async () => {
+  it('-> 204 and resends OTP even when email already verified', async () => {
     postgresQueryMock.mockResolvedValueOnce([{ email_verified: true }]);
+    redisSetMock.mockResolvedValue(undefined);
+    sendOtpVerificationEmailMock.mockResolvedValue(undefined);
 
-    const res = await request(app.getHttpServer())
+    await request(app.getHttpServer())
       .post('/auth/resend-link')
       .send(validPayload)
-      .expect(400);
+      .expect(204)
+      .expect('');
 
-    expect(res.body.message).toBe('Email already verified');
-    expect(redisSetMock).not.toHaveBeenCalled();
-    expect(sendOtpVerificationEmailMock).not.toHaveBeenCalled();
+    expect(redisSetMock).toHaveBeenCalledTimes(1);
+    expect(sendOtpVerificationEmailMock).toHaveBeenCalledTimes(1);
   });
 
   it('-> 204 on happy path and stores OTP hash in redis + sends email', async () => {

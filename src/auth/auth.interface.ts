@@ -38,31 +38,37 @@ export interface ForgotPasswordQueryInterface {
 }
 
 export interface loginResult {
-  dob: string;
-  email: string;
-  gender: string;
-  key_iv: string;
-  created_at: Date;
-  key_salt: string;
-  full_name: string;
-  access_token: string;
+  two_factor_enabled: boolean;
+}
+
+export interface loginQueryInterface {
+  id: number;
+  password_hash: string;
   email_verified: boolean;
   two_factor_enabled: boolean;
-  encrypted_master_key: string;
 }
-  
-export interface loginQueryInterface {
+
+export interface MeResult {
   id: number;
   dob: string;
   email: string;
   gender: string;
   key_iv: string;
-  created_at: Date;
   key_salt: string;
+  created_at: Date;
   full_name: string;
-  password_hash: string;
-  email_verified: boolean;
-  two_factor_enabled: boolean;
+  encrypted_master_key: string;
+}
+
+export interface MeQueryInterface {
+  id: number;
+  dob: string;
+  email: string;
+  gender: string;
+  key_iv: string;
+  key_salt: string;
+  created_at: Date;
+  full_name: string;
   encrypted_master_key: string;
 }
 
@@ -89,22 +95,8 @@ export interface ResetPasswordUpdateQueryInterface {
   id: string;
 }
 
-export interface SignupResult {
-  dob: string;
-  email: string;
-  gender: string;
-  key_iv: string;
-  key_salt: string;
-  created_at: Date;
-  full_name: string;
-  access_token: string;
-  encrypted_master_key: string;
-}
-
 export interface signupInsertQueryInterface {
   id: number;
-  created_at: Date;
-  email_verified: boolean;
 }
 
 export interface Update2FaGetQueryInterface {
