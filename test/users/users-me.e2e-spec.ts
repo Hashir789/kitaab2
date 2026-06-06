@@ -11,7 +11,7 @@ import { RedisService } from '../../src/database/redis/redis.service';
 import { EncryptionService } from '../../src/encryption/encryption.service';
 import { PostgresService } from '../../src/database/postgres/postgres.service';
 
-describe('AuthController (e2e) - GET /auth/me', () => {
+describe('UsersController (e2e) - GET /users/me', () => {
   let app: INestApplication<App>;
 
   const postgresQueryMock = jest.fn();
@@ -95,14 +95,14 @@ describe('AuthController (e2e) - GET /auth/me', () => {
   });
 
   it('-> 401 when Authorization header missing', async () => {
-    await request(app.getHttpServer()).get('/auth/me').expect(401);
+    await request(app.getHttpServer()).get('/users/me').expect(401);
 
     expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
   it('-> 401 when Authorization header malformed', async () => {
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Token abc')
       .expect(401);
 
@@ -113,7 +113,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     jwtVerifyAsyncMock.mockRejectedValueOnce(new Error('jwt malformed'));
 
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Bearer bad-token')
       .expect(401);
 
@@ -129,7 +129,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     });
 
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Bearer refresh-token')
       .expect(401);
 
@@ -145,7 +145,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     });
 
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Bearer access-token')
       .expect(403);
 
@@ -162,7 +162,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     postgresQueryMock.mockResolvedValueOnce([]);
 
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Bearer access-token')
       .expect(404);
 
@@ -179,7 +179,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     postgresQueryMock.mockRejectedValueOnce(new Error('db down'));
 
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Bearer access-token')
       .expect(500);
   });
@@ -194,7 +194,7 @@ describe('AuthController (e2e) - GET /auth/me', () => {
     postgresQueryMock.mockResolvedValueOnce([userRow]);
 
     await request(app.getHttpServer())
-      .get('/auth/me')
+      .get('/users/me')
       .set('Authorization', 'Bearer access-token')
       .expect(200)
       .expect((res) => {

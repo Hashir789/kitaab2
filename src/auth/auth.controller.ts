@@ -1,6 +1,6 @@
 import { AuthService } from './auth.service';
 import type { AuthenticatedRequest } from './auth.interface';
-import { loginResult, EmailVerifyResult, OtpVerifyResult, MeResult } from './auth.interface';
+import { loginResult, EmailVerifyResult, OtpVerifyResult } from './auth.interface';
 import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
 import { ChangePasswordDto, EmailVerifyQueryDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
 
@@ -31,12 +31,6 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async otpVerify(@Body() body: OtpVerifyDto): Promise<OtpVerifyResult | void> {
     return this.authService.otpVerify(body);
-  }
-
-  @Get('me')
-  @HttpCode(HttpStatus.OK)
-  async me(@Req() req: AuthenticatedRequest): Promise<MeResult> {
-    return this.authService.getMe(req);
   }
 
   @Post('resend-link')

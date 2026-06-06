@@ -38,6 +38,7 @@ export interface ForgotPasswordQueryInterface {
 }
 
 export interface loginResult {
+  access_token: string;
   two_factor_enabled: boolean;
 }
 
@@ -46,30 +47,6 @@ export interface loginQueryInterface {
   password_hash: string;
   email_verified: boolean;
   two_factor_enabled: boolean;
-}
-
-export interface MeResult {
-  id: number;
-  dob: string;
-  email: string;
-  gender: string;
-  key_iv: string;
-  key_salt: string;
-  created_at: Date;
-  full_name: string;
-  encrypted_master_key: string;
-}
-
-export interface MeQueryInterface {
-  id: number;
-  dob: string;
-  email: string;
-  gender: string;
-  key_iv: string;
-  key_salt: string;
-  created_at: Date;
-  full_name: string;
-  encrypted_master_key: string;
 }
 
 export interface otpVerifyQueryInterface {

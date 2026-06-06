@@ -1,8 +1,9 @@
 import { UserAnalyticsDto } from './users.dto';
 import { Logger } from '../logger/logger.service';
+import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { AgeDistributionResponse, GenderRatioResponse, UserTableResponse, UserTableRow, VisitorAssociationRow, VisitorsAssociationResponse } from './users.interface';
+import { AgeDistributionResponse, GenderRatioResponse, MeQueryInterface, MeResult, UserTableResponse, UserTableRow, VisitorAssociationRow, VisitorsAssociationResponse } from './users.interface';
 
 @Injectable()
 export class UsersService {
@@ -13,6 +14,30 @@ export class UsersService {
   ) {}
 
   // controller functions
+
+  async getMe(req: AuthenticatedRequest): Promise<MeResult> {
+    try {
+      this.loggerService.log('getMe {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      const rows = await this.postgresService.query<MeQueryInterface>(`
+        SELECT id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at
+        FROM users WHERE id = $1
+      `, [user_id]);
+      if (!rows?.length) {
+        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
+      }
+      const { id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at } = rows[0];
+      return { id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at };
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
 
   async userAnalytics(query: UserAnalyticsDto): Promise<UserTableResponse | GenderRatioResponse | AgeDistributionResponse | VisitorsAssociationResponse> {
     try {

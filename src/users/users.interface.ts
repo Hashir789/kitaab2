@@ -1,3 +1,27 @@
+export interface MeResult {
+  id: number;
+  dob: string;
+  email: string;
+  gender: string;
+  key_iv: string;
+  key_salt: string;
+  created_at: Date;
+  full_name: string;
+  encrypted_master_key: string;
+}
+
+export interface MeQueryInterface {
+  id: number;
+  dob: string;
+  email: string;
+  gender: string;
+  key_iv: string;
+  key_salt: string;
+  created_at: Date;
+  full_name: string;
+  encrypted_master_key: string;
+}
+
 export interface UserTableRow {
   id: number;
   visitor_id: number;

@@ -10,7 +10,7 @@ import { EncryptionService } from '../encryption/encryption.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { ChangePasswordDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
-import { loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface, MeResult, MeQueryInterface } from './auth.interface';
+import { loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface } from './auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -95,7 +95,8 @@ export class AuthService {
         FROM visitors v
         WHERE u.id = $1 AND v.anonymous_id = $2
       `, [id, anonymous_id]);
-      return { two_factor_enabled };
+      const access_token = await this.jwtService.signAsync({ sub: id, email: mail, type: 'access', email_verified: true });
+      return { two_factor_enabled, access_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -287,30 +288,6 @@ export class AuthService {
       `, [email_hmac]);
       return !rows?.length ? { verified: null }: { verified: rows[0].email_verified };  
     } catch(error) {
-      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
-      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  async getMe(req: AuthenticatedRequest): Promise<MeResult> {
-    try {
-      this.loggerService.log('getMe {controller}');
-      const { sub: user_id, type: token_type } = req.user;
-      if (token_type !== 'access') {
-        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
-      }
-      const rows = await this.postgresService.query<MeQueryInterface>(`
-        SELECT id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at
-        FROM users WHERE id = $1
-      `, [user_id]);
-      if (!rows?.length) {
-        this.loggerService.error('User not found', HttpStatus.NOT_FOUND);
-        throw new HttpException('User not found', HttpStatus.NOT_FOUND);
-      }
-      const { id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at } = rows[0];
-      return { id, email, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, created_at };
-    } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
