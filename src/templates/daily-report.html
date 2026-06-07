@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <title>Daily Report — Kitaab</title>
+  </head>
+  <body style="margin:0;padding:0;background-color:#f8f9fa;-webkit-font-smoothing:antialiased;">
+    <div style="display:none;max-height:0;overflow:hidden;mso-hide:all;">
+      Kitaab daily report for {{date}} — visitors, users and conversion at a glance.
+    </div>
+
+    <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="background-color:#f8f9fa;">
+      <tr>
+        <td align="center" style="padding:32px 16px;">
+          <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="max-width:600px;border-radius:12px;overflow:hidden;border:1px solid #e6e6e6;background-color:#f0f0f0;box-shadow:0 2px 4px rgba(0,0,0,0.08);">
+
+            <tr>
+              <td align="center" style="padding:24px 28px 0 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                <a href="https://www.kitaab.me" style="text-decoration:none;">
+                  <img src="https://www.kitaab.me/kitaab-logo.png" width="160" height="54" alt="Kitaab" border="0" style="display:block;width:160px;max-width:100%;height:auto;border:0;outline:none;text-decoration:none;" />
+                </a>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:16px 28px 8px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                <p style="margin:0 0 6px 0;font-size:11px;font-weight:600;letter-spacing:0.22em;text-transform:uppercase;color:#8c8c8c;">
+                  Daily report
+                </p>
+                <h1 style="margin:0 0 10px 0;font-size:22px;font-weight:600;line-height:1.25;color:#5a5a5a;">
+                  Kitaab activity summary
+                </h1>
+                <p style="margin:0;font-size:15px;line-height:1.6;color:#787878;">
+                  Here is how Kitaab performed on {{date}}.
+                </p>
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:8px 28px 28px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+
+                <p style="margin:16px 0 8px 0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8c8c8c;">
+                  Visitors
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px;background-color:#fafafa;border:1px solid #e6e6e6;">
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">New visitors</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{newVisitors}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Returning visitors</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{returningVisitors}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Total visits</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{totalVisits}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Clicks</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{clicks}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Navigations</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{navigations}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Visitor emails</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{visitorEmails}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;font-size:14px;color:#787878;">Visitor messages</td>
+                    <td align="right" style="padding:14px 16px;font-size:14px;font-weight:600;color:#5a5a5a;">{{visitorMessages}}</td>
+                  </tr>
+                </table>
+
+                <p style="margin:18px 0 8px 0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8c8c8c;">
+                  Timezones
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px;background-color:#fafafa;border:1px solid #e6e6e6;">
+                  {{timezoneRows}}
+                </table>
+
+                <p style="margin:18px 0 8px 0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8c8c8c;">
+                  Users
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px;background-color:#fafafa;border:1px solid #e6e6e6;">
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">New users</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{newUsers}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Returning users</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{returningUsers}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Total users</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{totalUsers}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;color:#787878;">Male</td>
+                    <td align="right" style="padding:14px 16px;border-bottom:1px dashed #dcdcdc;font-size:14px;font-weight:600;color:#5a5a5a;">{{male}}</td>
+                  </tr>
+                  <tr>
+                    <td style="padding:14px 16px;font-size:14px;color:#787878;">Female</td>
+                    <td align="right" style="padding:14px 16px;font-size:14px;font-weight:600;color:#5a5a5a;">{{female}}</td>
+                  </tr>
+                </table>
+
+                <p style="margin:18px 0 8px 0;font-size:12px;font-weight:600;letter-spacing:0.16em;text-transform:uppercase;color:#8c8c8c;">
+                  Age distribution
+                </p>
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="border-radius:10px;background-color:#fafafa;border:1px solid #e6e6e6;">
+                  {{ageRows}}
+                </table>
+
+                <table role="presentation" cellpadding="0" cellspacing="0" border="0" width="100%" style="margin-top:20px;border-radius:10px;background-color:#646464;">
+                  <tr>
+                    <td style="padding:18px 20px;font-size:13px;font-weight:600;letter-spacing:0.12em;text-transform:uppercase;color:#d6d6d6;">Conversion rate</td>
+                    <td align="right" style="padding:18px 20px;font-size:24px;font-weight:700;color:#ffffff;">{{conversion}}%</td>
+                  </tr>
+                </table>
+
+              </td>
+            </tr>
+
+            <tr>
+              <td style="padding:0 28px 28px 28px;font-family:system-ui,-apple-system,'Segoe UI',Roboto,'Helvetica Neue',Arial,sans-serif;">
+                <p style="margin:0;font-size:12px;line-height:1.5;text-align:center;color:#a0a0a0;">
+                  Kitaab — Islamic Deed Tracker<br />
+                  <a href="mailto:support.kitaab@gmail.com" style="color:#787878;text-decoration:none;">support.kitaab@gmail.com</a>
+                </p>
+              </td>
+            </tr>
+
+          </table>
+        </td>
+      </tr>
+    </table>
+  </body>
+</html>

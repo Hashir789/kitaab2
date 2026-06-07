@@ -1,14 +1,18 @@
 import { Logger } from '../logger/logger.service';
+import { EmailService } from '../email/email.service';
 import { RedisService } from '../database/redis/redis.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { CheckDatabaseConnectionsResponseInterface, DailyReportResponseInterface } from './app.interface';
+
+const DAILY_REPORT_RECIPIENT = 'muhammadhashirmalik753@gmail.com';
 
 @Injectable()
 export class AppService {
   
   constructor(
     private readonly loggerService: Logger,
+    private readonly emailService: EmailService,
     private readonly redisService: RedisService,
     private readonly postgresService: PostgresService
   ) {}
@@ -38,10 +42,10 @@ export class AppService {
     }
   }
 
-  dailyReport(): DailyReportResponseInterface {
+  async dailyReport(): Promise<DailyReportResponseInterface> {
     try {
       this.loggerService.log('dailyReport {controller}');
-      return {
+      const report: DailyReportResponseInterface = {
         visitors: {
           new_visitors: 120,
           returning_visitors: 45,
@@ -51,7 +55,7 @@ export class AppService {
           visitor_emails: 34,
           visitor_messages: 9,
           timezones: {
-            'Aisa/Karachi': 65,
+            'Asia/Karachi': 65,
             'Europe/London': 100
           }
         },
@@ -69,6 +73,19 @@ export class AppService {
         },
         conversion: 2
       };
+      await this.emailService.sendDailyReportEmail({
+        email: DAILY_REPORT_RECIPIENT,
+        date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
+        visitors: report.visitors,
+        users: {
+          ...report.users,
+          age: Object.fromEntries(
+            Object.entries(report.users.age).map(([years, count]) => [`${years} years`, count])
+          )
+        },
+        conversion: report.conversion
+      });
+      return report;
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

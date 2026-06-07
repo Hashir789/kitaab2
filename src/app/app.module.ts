@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { AppService } from './app.service';
 import { AppController } from './app.controller';
 import { AuthModule } from '../auth/auth.module';
+import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
 import { LoggerModule } from '../logger/logger.module';
 import { RedisModule } from '../database/redis/redis.module';
@@ -15,6 +16,7 @@ import { PostgresModule } from '../database/postgres/postgres.module';
       isGlobal: true,
     } as ConfigModuleOptions),
     AuthModule,
+    EmailModule,
     RedisModule,
     UsersModule,
     LoggerModule,
