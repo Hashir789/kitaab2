@@ -1,4 +1,4 @@
-import { IsNotEmpty, IsString, MinLength, IsBoolean, IsDateString, IsIn, Length, Matches, IsEmail } from 'class-validator';
+import { IsNotEmpty, IsString, MinLength, IsBoolean, IsDateString, IsIn, Length, Matches, IsEmail, IsOptional } from 'class-validator';
 
 export class ChangePasswordDto {
   @IsString()
@@ -57,7 +57,8 @@ export class OtpVerifyDto {
 export class ResendLinkDto {
   @IsString()
   @IsNotEmpty()
-  full_name: string;
+  @IsOptional()
+  full_name?: string;
 
   @IsEmail()
   @IsNotEmpty()

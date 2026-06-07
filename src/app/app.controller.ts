@@ -17,4 +17,10 @@ export class AppController {
   databaseConnectionCheck() {
     return this.appService.checkDatabaseConnections();
   }
+
+  @Get('/daily-report')
+  @HttpCode(HttpStatus.OK)
+  dailyReport() {
+    return this.appService.dailyReport();
+  }
 }
