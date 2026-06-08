@@ -1,26 +1,35 @@
 import { join } from 'path';
+import { Resend } from 'resend';
 import { readFile } from 'fs/promises';
-import * as nodemailer from 'nodemailer';
-import { Injectable } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
+import { HttpException, HttpStatus, Injectable } from '@nestjs/common';
 import { SendVisitorEmailCopyBody, SendPasswordResetEmailBody, SendOtpVerificationEmailBody, SendVisitorMessageCopyEmailBody, SendDailyReportEmailBody } from './email.interface';
 
 @Injectable()
 export class EmailService {
-  private readonly transporter: nodemailer.Transporter;
+  private readonly resend: Resend;
 
   constructor(
     private readonly loggerService: Logger,
-    private readonly configService: ConfigService
+    private readonly configService: ConfigService,
   ) {
-    this.transporter = nodemailer.createTransport({
-      service: 'gmail',
-      auth: {
-        user: this.configService.get<string>('EMAIL_USER'),
-        pass: this.configService.get<string>('EMAIL_PASS'),
-      },
+    this.resend = new Resend(this.configService.get<string>('RESEND_API_KEY'));
+  }
+
+  private async sendEmail(to: string, subject: string, html: string): Promise<void> {
+    this.loggerService.log('sendEmail {helper}');
+    const { data, error } = await this.resend.emails.send({
+      from: `${this.configService.get<string>('EMAIL_NAME')} <${this.configService.get<string>('EMAIL_USER')}>`,
+      to: [to],
+      subject,
+      html
     });
+    if (error) {
+      const { message, statusCode } = error;
+      this.loggerService.error(message, statusCode || HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(message, statusCode || HttpStatus.INTERNAL_SERVER_ERROR);
+    }
   }
 
   async sendOtpVerificationEmail(body: SendOtpVerificationEmailBody): Promise<void> {
@@ -32,12 +41,11 @@ export class EmailService {
       .replaceAll('{{greeting}}', full_name ? `Hi ${full_name},` : 'Hi,')
       .replaceAll('{{expiresInMinutes}}', String(expires_in_minutes))
       .replaceAll('{{otp}}', otp);
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: email,
-      subject: 'Your one-time password',
-      html,
-    });
+    await this.sendEmail(
+      email,
+      'Your one-time password',
+      html
+    );
   }
 
   async sendPasswordResetEmail(body: SendPasswordResetEmailBody): Promise<void> {
@@ -47,25 +55,19 @@ export class EmailService {
     const template = await readFile(template_path, 'utf-8');
     let reset_action: string;
     if (reset_link) {
-      reset_action = `
-      <a href="${reset_link}"
-         style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;color:#f0f0f0;background-color:#646464;">
-        Reset password
-      </a>`;
+      reset_action = `<a href="${reset_link}" style="display:inline-block;padding:12px 24px;font-size:14px;font-weight:600;text-decoration:none;border-radius:8px;color:#f0f0f0;background-color:#646464;">Reset password</a>`;
     } else {
-      reset_action =
-        '<p style="margin:0;font-size:13px;color:#787878;">If you still need access, try requesting another reset from the app.</p>';
+      reset_action = '<p style="margin:0;font-size:13px;color:#787878;">If you still need access, try requesting another reset from the app.</p>';
     }
     const html = template
       .replaceAll('{{name}}', full_name)
       .replaceAll('{{expiresInMinutes}}', String(expires_in_minutes))
       .replaceAll('{{resetAction}}', reset_action);
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: email,
-      subject: 'Reset your password',
-      html,
-    });
+    await this.sendEmail(
+      email,
+      'Reset your password',
+      html
+    );
   }
 
   async sendVisitorMessageCopyEmail(body: SendVisitorMessageCopyEmailBody): Promise<void> {
@@ -95,12 +97,11 @@ export class EmailService {
       .replaceAll('{{message}}', message)
       .replaceAll('{{timezone}}', timezone)
       .replaceAll('{{phone}}', phone || '---');
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: body.email,
-      subject: 'Copy of your message',
-      html,
-    });
+    await this.sendEmail(
+      body.email,
+      'Copy of your message',
+      html
+    );
   }
 
   async sendVisitorEmailCopy(body: SendVisitorEmailCopyBody): Promise<void> {
@@ -125,17 +126,18 @@ export class EmailService {
       .replaceAll('{{time}}', time)
       .replaceAll('{{email}}', email)
       .replaceAll('{{timezone}}', timezone);
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: body.email,
-      subject: 'We’ve received your message',
-      html,
-    });
+    await this.sendEmail(
+      body.email,
+      'We’ve received your message',
+      html
+    );
   }
 
   async sendDailyReportEmail(body: SendDailyReportEmailBody): Promise<void> {
     this.loggerService.log('sendDailyReportEmail {helper}');
     const { email, date, visitors, users, conversion } = body;
+    const { new_users, returning_users, total_users, male, female, age } = users;
+    const { new_visitors, returning_visitors, total_visitors, clicks, navigations, visitor_emails, visitor_messages, timezones } = visitors;
     const template_path = join(process.cwd(), 'src', 'templates', 'daily-report.html');
     const template = await readFile(template_path, 'utf-8');
     const number = (value: number): string => value.toLocaleString('en-US');
@@ -144,35 +146,33 @@ export class EmailService {
       if (keys.length === 0) {
         return `<tr><td style="padding:14px 16px;font-size:14px;color:#a0a0a0;">${emptyLabel}</td></tr>`;
       }
-      return keys
-        .map((key, index) => {
-          const border = index === keys.length - 1 ? '' : 'border-bottom:1px dashed #dcdcdc;';
-          return `<tr><td style="padding:14px 16px;${border}font-size:14px;color:#787878;">${key}</td><td align="right" style="padding:14px 16px;${border}font-size:14px;font-weight:600;color:#5a5a5a;">${number(entries[key])}</td></tr>`;
-        })
-        .join('');
+      return keys.map((key, index) => {
+        const border = index === keys.length - 1 ? '' : 'border-bottom:1px dashed #dcdcdc;';
+        return `<tr><td style="padding:14px 16px;${border}font-size:14px;color:#787878;">${key}</td><td align="right" style="padding:14px 16px;${border}font-size:14px;font-weight:600;color:#5a5a5a;">${number(entries[key])}</td></tr>`;
+      }).join('');
     };
     const html = template
       .replaceAll('{{date}}', date)
-      .replaceAll('{{newVisitors}}', number(visitors.new_visitors))
-      .replaceAll('{{returningVisitors}}', number(visitors.returning_visitors))
-      .replaceAll('{{totalVisits}}', number(visitors.total_visitors))
-      .replaceAll('{{clicks}}', number(visitors.clicks))
-      .replaceAll('{{navigations}}', number(visitors.navigations))
-      .replaceAll('{{visitorEmails}}', number(visitors.visitor_emails))
-      .replaceAll('{{visitorMessages}}', number(visitors.visitor_messages))
-      .replaceAll('{{timezoneRows}}', buildRows(visitors.timezones, 'No timezone data'))
-      .replaceAll('{{newUsers}}', number(users.new_users))
-      .replaceAll('{{returningUsers}}', number(users.returning_users))
-      .replaceAll('{{totalUsers}}', number(users.total_users))
-      .replaceAll('{{male}}', number(users.male))
-      .replaceAll('{{female}}', number(users.female))
-      .replaceAll('{{ageRows}}', buildRows(users.age, 'No age data'))
+      .replaceAll('{{newVisitors}}', number(new_visitors))
+      .replaceAll('{{returningVisitors}}', number(returning_visitors))
+      .replaceAll('{{totalVisits}}', number(total_visitors))
+      .replaceAll('{{clicks}}', number(clicks))
+      .replaceAll('{{navigations}}', number(navigations))
+      .replaceAll('{{visitorEmails}}', number(visitor_emails))
+      .replaceAll('{{visitorMessages}}', number(visitor_messages))
+      .replaceAll('{{timezoneRows}}', buildRows(timezones, 'No timezone data'))
+      .replaceAll('{{newUsers}}', number(new_users))
+      .replaceAll('{{returningUsers}}', number(returning_users))
+      .replaceAll('{{totalUsers}}', number(total_users))
+      .replaceAll('{{male}}', number(male))
+      .replaceAll('{{female}}', number(female))
+      .replaceAll('{{ageRows}}', buildRows(age, 'No age data'))
       .replaceAll('{{conversion}}', number(conversion));
-    await this.transporter.sendMail({
-      from: `"${this.configService.get<string>('EMAIL_NAME')}" <${this.configService.get<string>('EMAIL_USER')}>`,
-      to: email,
-      subject: 'Kitaab daily report',
-      html,
-    });
+    const formattedDate = new Date(date).toLocaleDateString('en-GB');
+    await this.sendEmail(
+      email,
+      `Kitaab Daily Report - ${formattedDate}`,
+      html
+    );
   }
 }

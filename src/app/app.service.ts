@@ -1,11 +1,10 @@
+import { ConfigService } from '@nestjs/config';
 import { Logger } from '../logger/logger.service';
 import { EmailService } from '../email/email.service';
 import { RedisService } from '../database/redis/redis.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { CheckDatabaseConnectionsResponseInterface, DailyReportResponseInterface } from './app.interface';
-
-const DAILY_REPORT_RECIPIENT = 'muhammadhashirmalik753@gmail.com';
 
 @Injectable()
 export class AppService {
@@ -14,6 +13,7 @@ export class AppService {
     private readonly loggerService: Logger,
     private readonly emailService: EmailService,
     private readonly redisService: RedisService,
+    private readonly configService: ConfigService,
     private readonly postgresService: PostgresService
   ) {}
   
@@ -73,17 +73,18 @@ export class AppService {
         },
         conversion: 2
       };
+      const { visitors, users, conversion } = report;
       await this.emailService.sendDailyReportEmail({
-        email: DAILY_REPORT_RECIPIENT,
+        email: this.configService.get<string>('DAILY_REPORT_RECIPIENT') ?? '',
         date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
-        visitors: report.visitors,
+        visitors,
         users: {
-          ...report.users,
+          ...users,
           age: Object.fromEntries(
             Object.entries(report.users.age).map(([years, count]) => [`${years} years`, count])
           )
         },
-        conversion: report.conversion
+        conversion: conversion
       });
       return report;
     } catch (error) {
