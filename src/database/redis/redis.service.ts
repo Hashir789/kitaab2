@@ -20,9 +20,30 @@ export class RedisService {
     await this.redis.set(key, value, { ex: ttlSeconds });
   }
 
+  async incrementBy(key: string, increment: number): Promise<void> {
+    this.loggerService.log('incrementBy {query}');
+    await this.redis.incrby(key, increment);
+  }
+
+  async incrementInHash(key: string, field: string, increment: number): Promise<number> {
+    this.loggerService.log('incrementInHash {query}');
+    return this.redis.hincrby(key, field, increment);
+  }
+
   async get(key: string): Promise<any> {
     this.loggerService.log('get {query}');
     return this.redis.get(key);
+  }
+
+  async getHash(key: string): Promise<Record<string, number>> {
+    this.loggerService.log('getHash {query}');
+    const hash = await this.redis.hgetall<Record<string, unknown>>(key);
+    if (!hash) {
+      return {};
+    }
+    return Object.fromEntries(
+      Object.entries(hash).map(([field, value]) => [field, Number(value) || 0])
+    );
   }
 
   async del(key: string): Promise<number> {

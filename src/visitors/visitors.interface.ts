@@ -18,6 +18,10 @@ export interface VisitorMessagesQueryInterface {
   visitor_id: number;
 };
 
+export interface TrackVisitorsQueryInterface {
+  number_of_visits: number;
+};
+
 export interface AnalyticsSummaryResponse {
   summary: {
     clicks: number;

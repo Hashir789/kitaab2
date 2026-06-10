@@ -1,9 +1,10 @@
 import { Logger } from '../logger/logger.service';
 import { EmailService } from '../email/email.service';
+import { RedisService } from '../database/redis/redis.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { TrackVisitorsDto, VisitorAnalyticsDto, VisitorEmailsDto, VisitorMessagesDto } from './visitors.dto';
-import { AnalyticsAssociationResponse, AnalyticsSummaryResponse, AnalyticsTableResponse, VisitorEmailsQueryInterface, VisitorMessagesQueryInterface } from './visitors.interface';
+import { AnalyticsAssociationResponse, AnalyticsSummaryResponse, AnalyticsTableResponse, TrackVisitorsQueryInterface, VisitorEmailsQueryInterface, VisitorMessagesQueryInterface } from './visitors.interface';
 
 @Injectable()
 export class VisitorService {
@@ -11,6 +12,7 @@ export class VisitorService {
   constructor(
     private readonly loggerService: Logger,
     private readonly emailService: EmailService,
+    private readonly redisService: RedisService,
     private readonly postgresService: PostgresService
   ) {}
   
@@ -20,7 +22,7 @@ export class VisitorService {
     try {
       this.loggerService.log('trackVisitor {controller}');
       const { timezone, anonymous_id, device_type, clicks, navigations } = payload;
-      await this.postgresService.query<void>(`
+      const rows = await this.postgresService.query<TrackVisitorsQueryInterface>(`
         INSERT INTO visitors (anonymous_id, timezone, device_type, clicks, navigations)
         VALUES ($1, $2, $3, COALESCE($4, 0), COALESCE($5, 0))
         ON CONFLICT (anonymous_id)
@@ -31,7 +33,19 @@ export class VisitorService {
           navigations = visitors.navigations + COALESCE(EXCLUDED.navigations, 0),
           number_of_visits = visitors.number_of_visits + 1,
           last_visited = NOW()
+        RETURNING number_of_visits
       `, [anonymous_id, timezone, device_type, clicks, navigations]);
+      const visitor = rows?.[0]?.number_of_visits === 1 ? 'new_visitors': 'returning_visitors';
+      this.redisService.incrementBy('report:clicks', clicks ?? 0)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementBy('report:navigations', navigations ?? 0)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementInHash('report:device_types', device_type, 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementInHash('report:timezones', timezone, 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementBy(`report:${visitor}`, 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -89,6 +103,8 @@ export class VisitorService {
       }
       this.emailService.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone })
         .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementBy('report:messages', 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -115,6 +131,8 @@ export class VisitorService {
       }
       const { timezone, created_at } = rows[0];
       this.emailService.sendVisitorEmailCopy({ email, timezone, created_at })
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementBy('report:emails', 1)
         .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

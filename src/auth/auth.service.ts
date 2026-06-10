@@ -59,6 +59,12 @@ export class AuthService {
       const otp = this.generateOtp();
       await this.storeOtpHash({ email_hmac, otp, expires_in_minutes });
       await this.emailService.sendOtpVerificationEmail({ email, full_name, otp, expires_in_minutes });
+      this.redisService.incrementBy('report:new_users', 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementInHash('report:gender', gender, 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementInHash('report:ages', JSON.stringify(this.calculateAge(dob)), 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -96,6 +102,8 @@ export class AuthService {
         WHERE u.id = $1 AND v.anonymous_id = $2
       `, [id, anonymous_id]);
       const access_token = await this.jwtService.signAsync({ sub: id, email: mail, type: 'access', email_verified: true });
+      this.redisService.incrementBy('report:returning_users', 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
       return { two_factor_enabled, access_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -336,6 +344,22 @@ export class AuthService {
     this.loggerService.log('generateOtp {helper}');
     const num = randomBytes(4).readUInt32BE(0) % 10000;
     return String(num).padStart(4, '0');
+  }
+
+  calculateAge(dob: string | Date): number {
+    this.loggerService.log('calculateAge {helper}');
+    const birthDate = new Date(dob);
+    if (Number.isNaN(birthDate.getTime())) {
+      this.loggerService.error('Invalid date of birth', HttpStatus.BAD_REQUEST);
+      throw new HttpException('Invalid date of birth', HttpStatus.BAD_REQUEST);
+    }
+    const now = new Date();
+    let age = now.getFullYear() - birthDate.getFullYear();
+    const monthDiff = now.getMonth() - birthDate.getMonth();
+    if (monthDiff < 0 || (monthDiff === 0 && now.getDate() < birthDate.getDate())) {
+      age--;
+    }
+    return age;
   }
 
   private async storeOtpHash(body: { email_hmac: string; otp: string; expires_in_minutes: number }): Promise<void> {

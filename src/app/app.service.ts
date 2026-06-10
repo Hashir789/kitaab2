@@ -45,33 +45,53 @@ export class AppService {
   async dailyReport(): Promise<DailyReportResponseInterface> {
     try {
       this.loggerService.log('dailyReport {controller}');
+      const [
+        new_users,
+        returning_users,
+        new_visitors,
+        returning_visitors,
+        clicks,
+        navigations,
+        visitor_emails,
+        visitor_messages,
+        gender,
+        age,
+        timezones
+      ] = await Promise.all([
+        this.readCounter('report:new_users'),
+        this.readCounter('report:returning_users'),
+        this.readCounter('report:new_visitors'),
+        this.readCounter('report:returning_visitors'),
+        this.readCounter('report:clicks'),
+        this.readCounter('report:navigations'),
+        this.readCounter('report:emails'),
+        this.readCounter('report:messages'),
+        this.redisService.getHash('report:gender'),
+        this.redisService.getHash('report:ages'),
+        this.redisService.getHash('report:timezones')
+      ]);
+      const total_users = new_users + returning_users;
+      const total_visitors = new_visitors + returning_visitors;
       const report: DailyReportResponseInterface = {
         visitors: {
-          new_visitors: 120,
-          returning_visitors: 45,
-          total_visitors: 210,
-          clicks: 9273,
-          navigations: 847,
-          visitor_emails: 34,
-          visitor_messages: 9,
-          timezones: {
-            'Asia/Karachi': 65,
-            'Europe/London': 100
-          }
+          new_visitors,
+          returning_visitors,
+          total_visitors,
+          clicks,
+          navigations,
+          visitor_emails,
+          visitor_messages,
+          timezones
         },
         users: {
-          new_users: 32,
-          returning_users: 26,
-          total_users: 68,
-          male: 23,
-          female: 35,
-          age: {
-            '18': 30,
-            '20': 25,
-            '25': 3
-          }
+          new_users,
+          returning_users,
+          total_users,
+          male: gender.male ?? 0,
+          female: gender.female ?? 0,
+          age
         },
-        conversion: 2
+        conversion: new_visitors > 0 ? Math.round((new_users / new_visitors) * 100) : 0
       };
       const { visitors, users, conversion } = report;
       this.emailService.sendDailyReportEmail({
@@ -84,7 +104,7 @@ export class AppService {
             Object.entries(report.users.age).map(([years, count]) => [`${years} years`, count])
           )
         },
-        conversion: conversion
+        conversion
       }).catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
       return report;
     } catch (error) {
@@ -94,6 +114,12 @@ export class AppService {
   }
 
   // Helper functions
+
+  private async readCounter(key: string): Promise<number> {
+    this.loggerService.log('readCounter {helper}');
+    const value = await this.redisService.get(key);
+    return Number(value) || 0;
+  }
   
   private async tryPostgres(): Promise<void> {
     this.loggerService.log('tryPostgres {helper}');
