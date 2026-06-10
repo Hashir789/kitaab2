@@ -12,7 +12,7 @@ export class EmailService {
 
   constructor(
     private readonly loggerService: Logger,
-    private readonly configService: ConfigService,
+    private readonly configService: ConfigService
   ) {
     this.resend = new Resend(this.configService.get<string>('RESEND_API_KEY'));
   }

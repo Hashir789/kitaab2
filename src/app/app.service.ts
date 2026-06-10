@@ -74,7 +74,7 @@ export class AppService {
         conversion: 2
       };
       const { visitors, users, conversion } = report;
-      await this.emailService.sendDailyReportEmail({
+      this.emailService.sendDailyReportEmail({
         email: this.configService.get<string>('DAILY_REPORT_RECIPIENT') ?? '',
         date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
         visitors,
@@ -85,7 +85,7 @@ export class AppService {
           )
         },
         conversion: conversion
-      });
+      }).catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
       return report;
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

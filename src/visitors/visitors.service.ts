@@ -87,7 +87,8 @@ export class VisitorService {
         this.loggerService.error('Visitor not found', HttpStatus.NOT_FOUND);
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
-      await this.emailService.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone });
+      this.emailService.sendVisitorMessageCopyEmail({ name, email, subject, phone, message, timezone: rows[0].timezone })
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -113,7 +114,8 @@ export class VisitorService {
         throw new HttpException('Visitor not found', HttpStatus.NOT_FOUND);
       }
       const { timezone, created_at } = rows[0];
-      await this.emailService.sendVisitorEmailCopy({ email, timezone, created_at });
+      this.emailService.sendVisitorEmailCopy({ email, timezone, created_at })
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
