@@ -70,6 +70,8 @@ describe('AuthController (e2e) - POST /auth/login', () => {
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
+        incrementBy: jest.fn(async () => undefined),
+        incrementInHash: jest.fn(async () => 1),
       })
       .overrideProvider(JwtService)
       .useValue({

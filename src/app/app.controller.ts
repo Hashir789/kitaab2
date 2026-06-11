@@ -19,8 +19,8 @@ export class AppController {
   }
 
   @Get('/daily-report')
-  @HttpCode(HttpStatus.OK)
-  dailyReport() {
-    return this.appService.dailyReport();
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async dailyReport() {
+    await this.appService.dailyReport();
   }
 }

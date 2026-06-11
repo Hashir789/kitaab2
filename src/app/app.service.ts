@@ -8,7 +8,22 @@ import { CheckDatabaseConnectionsResponseInterface, DailyReportResponseInterface
 
 @Injectable()
 export class AppService {
-  
+
+  private readonly reportKeys = [
+    'report:new_users',
+    'report:returning_users',
+    'report:new_visitors',
+    'report:returning_visitors',
+    'report:clicks',
+    'report:navigations',
+    'report:emails',
+    'report:messages',
+    'report:gender',
+    'report:ages',
+    'report:timezones',
+    'report:device_types'
+  ];
+
   constructor(
     private readonly loggerService: Logger,
     private readonly emailService: EmailService,
@@ -42,22 +57,10 @@ export class AppService {
     }
   }
 
-  async dailyReport(): Promise<DailyReportResponseInterface> {
+  async dailyReport(): Promise<void> {
     try {
       this.loggerService.log('dailyReport {controller}');
-      const [
-        new_users,
-        returning_users,
-        new_visitors,
-        returning_visitors,
-        clicks,
-        navigations,
-        visitor_emails,
-        visitor_messages,
-        gender,
-        age,
-        timezones
-      ] = await Promise.all([
+      const [ new_users, returning_users, new_visitors, returning_visitors, clicks, navigations, visitor_emails, visitor_messages, gender, age, timezones, device_types ] = await Promise.all([
         this.readCounter('report:new_users'),
         this.readCounter('report:returning_users'),
         this.readCounter('report:new_visitors'),
@@ -68,7 +71,8 @@ export class AppService {
         this.readCounter('report:messages'),
         this.redisService.getHash('report:gender'),
         this.redisService.getHash('report:ages'),
-        this.redisService.getHash('report:timezones')
+        this.redisService.getHash('report:timezones'),
+        this.redisService.getHash('report:device_types')
       ]);
       const total_users = new_users + returning_users;
       const total_visitors = new_visitors + returning_visitors;
@@ -81,7 +85,8 @@ export class AppService {
           navigations,
           visitor_emails,
           visitor_messages,
-          timezones
+          timezones,
+          device_types
         },
         users: {
           new_users,
@@ -94,7 +99,7 @@ export class AppService {
         conversion: new_visitors > 0 ? Math.round((new_users / new_visitors) * 100) : 0
       };
       const { visitors, users, conversion } = report;
-      this.emailService.sendDailyReportEmail({
+      await this.emailService.sendDailyReportEmail({
         email: this.configService.get<string>('DAILY_REPORT_RECIPIENT') ?? '',
         date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
         visitors,
@@ -105,8 +110,8 @@ export class AppService {
           )
         },
         conversion
-      }).catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
-      return report;
+      });
+      await Promise.all(this.reportKeys.map((key) => this.redisService.del(key)));
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

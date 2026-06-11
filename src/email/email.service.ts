@@ -137,7 +137,7 @@ export class EmailService {
     this.loggerService.log('sendDailyReportEmail {helper}');
     const { email, date, visitors, users, conversion } = body;
     const { new_users, returning_users, total_users, male, female, age } = users;
-    const { new_visitors, returning_visitors, total_visitors, clicks, navigations, visitor_emails, visitor_messages, timezones } = visitors;
+    const { new_visitors, returning_visitors, total_visitors, clicks, navigations, visitor_emails, visitor_messages, timezones, device_types } = visitors;
     const template_path = join(process.cwd(), 'src', 'templates', 'daily-report.html');
     const template = await readFile(template_path, 'utf-8');
     const number = (value: number): string => value.toLocaleString('en-US');
@@ -161,6 +161,7 @@ export class EmailService {
       .replaceAll('{{visitorEmails}}', number(visitor_emails))
       .replaceAll('{{visitorMessages}}', number(visitor_messages))
       .replaceAll('{{timezoneRows}}', buildRows(timezones, 'No timezone data'))
+      .replaceAll('{{deviceRows}}', buildRows(device_types, 'No device data'))
       .replaceAll('{{newUsers}}', number(new_users))
       .replaceAll('{{returningUsers}}', number(returning_users))
       .replaceAll('{{totalUsers}}', number(total_users))

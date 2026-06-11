@@ -13,6 +13,7 @@ export interface DailyReportResponseInterface {
     visitor_messages: number;
     returning_visitors: number;
     timezones: Record<string, number>;
+    device_types: Record<string, number>;
   };
   users: {
     male: number;

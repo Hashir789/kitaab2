@@ -7,6 +7,7 @@ import { Logger } from '../src/logger/logger.service';
 import { JwtAuthGuard } from '../src/auth/auth.guard';
 import { Test, TestingModule } from '@nestjs/testing';
 import { AppController } from '../src/app/app.controller';
+import { EmailService } from '../src/email/email.service';
 import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { RedisService } from '../src/database/redis/redis.service';
 import { PostgresService } from '../src/database/postgres/postgres.service';
@@ -44,6 +45,7 @@ async function createTestApp(options?: {
       { provide: Logger, useValue: logger },
       { provide: JwtService, useValue: jwtService },
       { provide: ConfigService, useValue: configService },
+      { provide: EmailService, useValue: { sendDailyReportEmail: jest.fn(async () => undefined) } },
       { provide: RedisService, useValue: { ping: jest.fn(async () => undefined) } },
       { provide: PostgresService, useValue: { ping: jest.fn(async () => undefined) } },
     ],

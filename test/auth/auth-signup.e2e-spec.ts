@@ -102,6 +102,8 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
+        incrementBy: jest.fn(async () => undefined),
+        incrementInHash: jest.fn(async () => 1),
       })
       .overrideProvider(EmailService)
       .useValue({
