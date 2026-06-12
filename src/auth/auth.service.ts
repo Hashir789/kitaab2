@@ -101,10 +101,9 @@ export class AuthService {
         FROM visitors v
         WHERE u.id = $1 AND v.anonymous_id = $2
       `, [id, anonymous_id]);
-      const access_token = await this.jwtService.signAsync({ sub: id, email: mail, type: 'access', email_verified: true });
       this.redisService.incrementBy('report:returning_users', 1)
         .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
-      return { two_factor_enabled, access_token };
+      return { two_factor_enabled };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -124,16 +123,24 @@ export class AuthService {
         throw new HttpException('Invalid or expired code', HttpStatus.BAD_REQUEST);
       }
       const rows = await this.postgresService.query<otpVerifyQueryInterface>(`
-        UPDATE users SET email_verified = TRUE
-        WHERE email = $1 AND email_verified = FALSE
-        RETURNING id
+        WITH updated AS (
+          UPDATE users
+          SET email_verified = TRUE
+          WHERE email = $1
+            AND email_verified = FALSE
+          RETURNING id
+        )
+        SELECT id FROM updated
+        UNION ALL
+        SELECT id
+        FROM users
+        WHERE email = $1
+          AND NOT EXISTS (SELECT 1 FROM updated);
       `, [email_hmac]);
       await this.redisService.del(redis_key);
-      if (rows?.length) {
-        const { id } = rows[0];
-        const access_token = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified: true });
-        return { access_token };
-      }
+      const { id } = rows[0];
+      const access_token = await this.jwtService.signAsync({ sub: id, email, type: 'access', email_verified: true });
+      return { access_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

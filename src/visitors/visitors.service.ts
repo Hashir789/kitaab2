@@ -116,14 +116,19 @@ export class VisitorService {
       this.loggerService.log('visitorEmails {controller}');
       const { anonymous_id, email } = payload;
       const rows = await this.postgresService.query<VisitorEmailsQueryInterface>(`
-        INSERT INTO visitor_emails (visitor_id, email)
-        SELECT v.id, $1
-        FROM visitors v
-        WHERE v.anonymous_id = $2
-        ON CONFLICT (email)
-        DO UPDATE SET
-          visitor_id = EXCLUDED.visitor_id
-        RETURNING *;
+        WITH inserted AS (
+          INSERT INTO visitor_emails (visitor_id, email)
+          SELECT v.id, $1
+          FROM visitors v
+          WHERE v.anonymous_id = $2
+          ON CONFLICT (email)
+          DO UPDATE SET
+            visitor_id = EXCLUDED.visitor_id
+          RETURNING *
+        )
+        SELECT i.*, v.timezone
+        FROM inserted i
+        JOIN visitors v ON v.id = i.visitor_id;
       `, [email, anonymous_id]);
       if (!rows?.length) {
         this.loggerService.error('Visitor not found', HttpStatus.NOT_FOUND);

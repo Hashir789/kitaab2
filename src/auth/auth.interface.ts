@@ -38,7 +38,6 @@ export interface ForgotPasswordQueryInterface {
 }
 
 export interface loginResult {
-  access_token: string;
   two_factor_enabled: boolean;
 }
 
