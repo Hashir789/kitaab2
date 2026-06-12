@@ -41,6 +41,10 @@ export interface loginResult {
   two_factor_enabled: boolean;
 }
 
+export interface BackofficeLoginResult {
+  access_token: string;
+}
+
 export interface loginQueryInterface {
   id: number;
   password_hash: string;

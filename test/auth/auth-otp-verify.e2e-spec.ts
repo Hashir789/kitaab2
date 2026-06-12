@@ -171,20 +171,28 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
     expect(redisDelMock).not.toHaveBeenCalled();
   });
 
-  it('-> 200 with empty body and deletes redis key when UPDATE returns no rows (already verified)', async () => {
+  it('-> 200 and returns access token when email is already verified', async () => {
     redisGetMock.mockResolvedValueOnce('stored-otp-hash');
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
-    postgresQueryMock.mockResolvedValueOnce([]);
+    postgresQueryMock.mockResolvedValueOnce([{ id: 1 }]);
+    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
     redisDelMock.mockResolvedValueOnce(undefined);
 
     await request(app.getHttpServer())
       .post('/auth/otp-verify')
       .send(validPayload)
       .expect(200)
-      .expect('');
+      .expect((res) => {
+        expect(res.body).toEqual({ access_token: 'access-token' });
+      });
 
     expect(redisDelMock).toHaveBeenCalledWith('otp:email-hmac');
-    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+    expect(jwtSignAsyncMock).toHaveBeenCalledWith({
+      sub: 1,
+      email: validPayload.email,
+      type: 'access',
+      email_verified: true,
+    });
   });
 
   it('-> 500 mapped when redis.get throws', async () => {
@@ -242,7 +250,7 @@ describe('AuthController (e2e) - POST /auth/otp-verify', () => {
     expect(compare).toHaveBeenCalledWith(validPayload.otp, 'stored-otp-hash');
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
     const updateCall = postgresQueryMock.mock.calls[0];
-    expect(updateCall[0]).toMatch(/UPDATE users SET email_verified = TRUE/);
+    expect(updateCall[0]).toMatch(/UPDATE users\s+SET email_verified = TRUE/);
     expect(updateCall[1]).toEqual(['email-hmac']);
     expect(jwtSignAsyncMock).toHaveBeenCalledWith({
       sub: 1,
