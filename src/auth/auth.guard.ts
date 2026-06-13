@@ -20,7 +20,6 @@ export class JwtAuthGuard implements CanActivate {
     '/auth/email-verify',
     '/auth/reset-password',
     '/auth/forgot-password',
-    '/auth/login/backoffice',
     '/database/connection-check'
   ];
   

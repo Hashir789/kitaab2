@@ -1,8 +1,8 @@
 import { AuthService } from './auth.service';
 import type { AuthenticatedRequest } from './auth.interface';
+import { loginResult, EmailVerifyResult, OtpVerifyResult } from './auth.interface';
 import { Controller, Post, Get, Patch, Body, Query, Req, HttpCode, HttpStatus } from '@nestjs/common';
-import { BackofficeLoginResult, loginResult, EmailVerifyResult, OtpVerifyResult } from './auth.interface';
-import { BackofficeLoginDto, ChangePasswordDto, EmailVerifyQueryDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
+import { ChangePasswordDto, EmailVerifyQueryDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
 
 @Controller('auth')
 export class AuthController {
@@ -19,12 +19,6 @@ export class AuthController {
   @HttpCode(HttpStatus.OK)
   async login(@Body() body: LoginDto): Promise<loginResult> {
     return this.authService.login(body);
-  }
-
-  @Post('login/backoffice')
-  @HttpCode(HttpStatus.OK)
-  async backofficeLogin(@Body() body: BackofficeLoginDto): Promise<BackofficeLoginResult> {
-    return this.authService.backofficeLogin(body);
   }
 
   @Get('email-verify')

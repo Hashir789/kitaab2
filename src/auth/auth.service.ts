@@ -9,8 +9,8 @@ import { RedisService } from '../database/redis/redis.service';
 import { EncryptionService } from '../encryption/encryption.service';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { BackofficeLoginDto, ChangePasswordDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
-import { BackofficeLoginResult, loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface } from './auth.interface';
+import { ChangePasswordDto, ForgotPasswordDto, LoginDto, OtpVerifyDto, ResendLinkDto, ResetPasswordDto, SignupDto, update2faDto } from './auth.dto';
+import { loginQueryInterface, loginResult, ResetPasswordSelectQueryInterface, ResetPasswordUpdateQueryInterface, ForgotPasswordQueryInterface, ChangePasswordSelectQueryInterface, ChangePasswordUpdateQueryInterface, otpVerifyQueryInterface, OtpVerifyResult, EmailVerifyQueryInterface, EmailVerifyResult, signupInsertQueryInterface, Update2FaGetQueryInterface, Update2FaPatchQueryInterface, resendLinkGetQueryInterface } from './auth.interface';
 
 @Injectable()
 export class AuthService {
@@ -103,39 +103,11 @@ export class AuthService {
       `, [id, anonymous_id]);
       this.redisService.incrementBy('report:returning_users', 1)
         .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
-      return { two_factor_enabled };
-    } catch (error) {
-      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
-      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
-    }
-  }
-
-  async backofficeLogin(payload: BackofficeLoginDto): Promise<BackofficeLoginResult> {
-    try {
-      this.loggerService.log('backofficeLogin {controller}');
-      const { email: mail, password } = payload;
-      const pepper = this.configService.get<string>('PASSWORD_PEPPER');
-      const email_hmac = this.encryptionService.hmacEmail(mail);
-      const rows = await this.postgresService.query<loginQueryInterface>(`
-        SELECT id, password_hash, two_factor_enabled, email_verified
-        FROM users WHERE email = $1
-      `, [email_hmac]);
-      if (!rows?.length) {
-        this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
-      }
-      const { id, password_hash, email_verified } = rows[0];
-      const hash_password = await compare(password + pepper, password_hash);
-      if (!hash_password) {
-        this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
-      }
-      if (!email_verified) {
-        this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
-        throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
+      if (two_factor_enabled) {
+        return { two_factor_enabled };
       }
       const access_token = await this.jwtService.signAsync({ sub: id, email: mail, type: 'access', email_verified: true });
-      return { access_token };
+      return { two_factor_enabled, access_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

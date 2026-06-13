@@ -42,17 +42,6 @@ export class LoginDto {
   anonymous_id: string;
 }
 
-export class BackofficeLoginDto {
-  @IsEmail()
-  @IsNotEmpty()
-  email: string;
-
-  @IsString()
-  @IsNotEmpty()
-  @MinLength(8)
-  password: string;
-}
-
 export class OtpVerifyDto {
   @IsEmail()
   @IsNotEmpty()

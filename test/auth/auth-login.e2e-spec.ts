@@ -258,11 +258,12 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
   });
 
-  it('-> 200 and returns two_factor_enabled on happy path', async () => {
+  it('-> 200 and returns access_token when 2FA is disabled', async () => {
     postgresQueryMock
       .mockResolvedValueOnce([userRow])
       .mockResolvedValueOnce([]);
     (compare as unknown as jest.Mock).mockResolvedValueOnce(true);
+    jwtSignAsyncMock.mockResolvedValueOnce('access-token');
 
     await request(app.getHttpServer())
       .post('/auth/login')
@@ -271,12 +272,18 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       .expect((res) => {
         expect(res.body).toEqual({
           two_factor_enabled: userRow.two_factor_enabled,
+          access_token: 'access-token',
         });
       });
 
     expect(compare).toHaveBeenCalledWith('password123' + 'pepper', 'stored-hash');
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
-    expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+    expect(jwtSignAsyncMock).toHaveBeenCalledWith({
+      sub: userRow.id,
+      email: validPayload.email,
+      type: 'access',
+      email_verified: true,
+    });
   });
 
   it('-> 200 and returns two_factor_enabled when 2FA enabled', async () => {
