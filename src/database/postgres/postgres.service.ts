@@ -28,7 +28,7 @@ export class PostgresService implements OnModuleDestroy {
 
     let formattedQuery: string = text;
     params.forEach((param: unknown, index: number) => {
-      const placeholder: string = `$${index + 1}`;
+      const placeholder = new RegExp(`\\$${index + 1}(?!\\d)`, 'g');
       const formattedParam: string =
         typeof param === 'string' ? `'${param}'` : String(param);
       formattedQuery = formattedQuery.replace(placeholder, formattedParam);

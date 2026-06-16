@@ -321,6 +321,9 @@ describe('AuthController (e2e) - POST /auth/signup', () => {
     expect(postgresQueryMock).toHaveBeenCalledTimes(1);
     const insertCall = postgresQueryMock.mock.calls[0];
     expect(insertCall[0]).toMatch(/INSERT INTO users/);
+    expect(insertCall[0]).toMatch(/INSERT INTO deeds/);
+    expect(insertCall[0]).toMatch(/'hasanaat'/);
+    expect(insertCall[0]).toMatch(/'saiyyiaat'/);
     expect(insertCall[1]).toEqual([
       'email-hmac',
       'hashed-secret',

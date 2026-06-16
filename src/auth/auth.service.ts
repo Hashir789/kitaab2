@@ -44,13 +44,24 @@ export class AuthService {
       const email_hmac = this.encryptionService.hmacEmail(email);
       const expires_in_minutes = Number(this.configService.get<string>('OTP_EXPIRES_IN_MINUTES'));
       const rows = await this.postgresService.query<signupInsertQueryInterface>(`
-        INSERT INTO users (visitor_id, email, password_hash, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key, email_verified, two_factor_enabled, last_login_at)
-        SELECT v.id, $1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, FALSE, FALSE, NOW()
-        FROM visitors v
-        WHERE v.anonymous_id = $12
-        ON CONFLICT (email)
-        DO NOTHING
-        RETURNING id;
+        WITH inserted_user AS (
+          INSERT INTO users (visitor_id, email, password_hash, full_name, gender, dob, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key, email_verified, two_factor_enabled, last_login_at)
+          SELECT v.id, $1, $2, $3, $4, $5::date, $6, $7, $8, $9, $10, $11, FALSE, FALSE, NOW()
+          FROM visitors v
+          WHERE v.anonymous_id = $12
+          ON CONFLICT (email)
+          DO NOTHING
+          RETURNING id
+        ),
+        inserted_deeds AS (
+          INSERT INTO deeds (user_id, category_type)
+          SELECT inserted_user.id, default_deeds.category_type::deed_category_type
+          FROM inserted_user
+          CROSS JOIN (VALUES ('hasanaat'), ('saiyyiaat')) AS default_deeds(category_type)
+          ON CONFLICT (user_id, category_type)
+          DO NOTHING
+        )
+        SELECT id FROM inserted_user;
       `, [ email_hmac, passwordHash, full_name_encrypted, gender, dob, key_salt, key_iv, encrypted_master_key, recovery_key_salt, recovery_key_iv, recovery_encrypted_master_key, anonymous_id ]);
       if (!rows?.length) {
         this.loggerService.error('User already exists', HttpStatus.NOT_FOUND);
