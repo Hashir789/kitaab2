@@ -40,6 +40,32 @@ export class DeedsService {
     }
   }
 
+  async getDeedItems(category: string, req: AuthenticatedRequest): Promise<DeedItemResult[]> {
+    try {
+      this.loggerService.log('getDeedItems {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      if (!(category === 'hasanaat' || category === 'saiyyiaat')) {
+        this.loggerService.error('Invalid deed category', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Invalid deed category', HttpStatus.BAD_REQUEST);
+      }
+      const deed_id = await this.getUserDeedId(this.postgresService, user_id, category);
+      const rows = await this.postgresService.query<DeedItemResult>(`
+        SELECT deed_item_id, deed_id, parent_deed_item_id, name, description, display_order, hide_type, created_at
+        FROM deed_items
+        WHERE deed_id = $1
+        ORDER BY display_order ASC, deed_item_id ASC
+      `, [deed_id]);
+      return this.buildDeedItemTree(rows);
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
   private async getUserDeedId(client: TransactionClient, user_id: number, category: DeedCategoryType): Promise<number> {
     const rows = await client.query<DeedQueryInterface>(`
       SELECT deed_id
@@ -86,5 +112,32 @@ export class DeedsService {
       created.children.push(await this.insertDeedItemTree(client, deed_id, created.deed_item_id, child));
     }
     return created;
+  }
+
+  private buildDeedItemTree(rows: DeedItemResult[]): DeedItemResult[] {
+    const itemsById = new Map<number, DeedItemResult>();
+    const roots: DeedItemResult[] = [];
+
+    for (const row of rows) {
+      itemsById.set(row.deed_item_id, { ...row });
+    }
+
+    for (const item of itemsById.values()) {
+      if (item.parent_deed_item_id === null) {
+        roots.push(item);
+        continue;
+      }
+
+      const parent = itemsById.get(item.parent_deed_item_id);
+      if (!parent) {
+        roots.push(item);
+        continue;
+      }
+
+      parent.children ??= [];
+      parent.children.push(item);
+    }
+
+    return roots;
   }
 }

@@ -2,7 +2,7 @@ import { DeedsService } from './deeds.service';
 import { CreateDeedItemDto } from './deeds.dto';
 import { DeedItemResult } from './deeds.interface';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
-import { Body, Controller, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Get, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
 
 @Controller('deeds')
 export class DeedsController {
@@ -13,5 +13,10 @@ export class DeedsController {
   @HttpCode(HttpStatus.CREATED)
   async createDeedItem(@Param('category') category: string, @Body() body: CreateDeedItemDto, @Req() req: AuthenticatedRequest): Promise<DeedItemResult> {
     return this.deedsService.createDeedItem(category, body, req);
+  }
+
+  @Get(':category/items')
+  async getDeedItems(@Param('category') category: string, @Req() req: AuthenticatedRequest): Promise<DeedItemResult[]> {
+    return this.deedsService.getDeedItems(category, req);
   }
 }
