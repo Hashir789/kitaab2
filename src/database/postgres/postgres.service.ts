@@ -1,6 +1,7 @@
-import { Pool } from 'pg';
+import { Pool, PoolClient } from 'pg';
 import { ConfigService } from '@nestjs/config';
 import { Logger } from '../../logger/logger.service';
+import { TransactionClient } from './postgres.interface';
 import { Injectable, OnModuleDestroy } from '@nestjs/common';
 
 @Injectable()
@@ -41,6 +42,28 @@ export class PostgresService implements OnModuleDestroy {
     this.loggerService.log(`Executing query: ${formattedQuery}`);
     const result = await this.pool.query<T>(text, params);
     return result.rows;
+  }
+
+  async transaction<T>(callback: (client: TransactionClient) => Promise<T>): Promise<T> {
+    const client: PoolClient = await this.pool.connect();
+    try {
+      await client.query('BEGIN');
+      const result = await callback({
+        query: async <R = any>(text: string, params?: any[]): Promise<R[]> => {
+          const formattedQuery: string = this.formatQuery(text, params);
+          this.loggerService.log(`Executing query: ${formattedQuery}`);
+          const queryResult = await client.query<R>(text, params);
+          return queryResult.rows;
+        }
+      });
+      await client.query('COMMIT');
+      return result;
+    } catch (error) {
+      await client.query('ROLLBACK');
+      throw error;
+    } finally {
+      client.release();
+    }
   }
 
   async ping(): Promise<void> {

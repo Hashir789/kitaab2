@@ -1,3 +1,5 @@
+export type VisitorAnalyticsType = 'summary' | 'users_association' | 'messages_association' | 'emails_association' | 'visitors_table' | 'visitor_messages_table' | 'visitor_emails_table';
+
 export interface VisitorEmailsQueryInterface {
   id: number;
   email: string;

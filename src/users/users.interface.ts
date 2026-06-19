@@ -1,3 +1,5 @@
+export type UserAnalyticsType = 'users_table' | 'gender_ratio' | 'age_distribution' | 'visitors_association';
+
 export interface MeResult {
   id: number;
   dob: string;

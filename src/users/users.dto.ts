@@ -1,11 +1,6 @@
 import { Type } from 'class-transformer';
+import type { UserAnalyticsType } from './users.interface';
 import { IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Max, Min } from 'class-validator';
-
-export type UserAnalyticsType =
-  | 'users_table'
-  | 'gender_ratio'
-  | 'age_distribution'
-  | 'visitors_association';
 
 export class UserAnalyticsDto {
   @IsString()
