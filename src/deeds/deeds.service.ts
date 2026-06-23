@@ -1,5 +1,5 @@
 import { Logger } from '../logger/logger.service';
-import { CreateDeedItemDto } from './deeds.dto';
+import { CreateDeedItemDto, ReorderDeedItemsDto } from './deeds.dto';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
@@ -14,7 +14,7 @@ export class DeedsService {
     private readonly postgresService: PostgresService
   ) {}
 
-  async createDeedItem(category: string, payload: CreateDeedItemDto, req: AuthenticatedRequest): Promise<DeedItemResult> {
+  async createDeedItem(category: string, payload: CreateDeedItemDto, req: AuthenticatedRequest): Promise<void> {
     try {
       this.loggerService.log('createDeedItem {controller}');
       const { sub: user_id, type: token_type } = req.user;
@@ -26,13 +26,58 @@ export class DeedsService {
         this.loggerService.error('Invalid deed category', HttpStatus.BAD_REQUEST);
         throw new HttpException('Invalid deed category', HttpStatus.BAD_REQUEST);
       }
-      return await this.postgresService.transaction(async (client) => {
+      await this.postgresService.transaction(async (client) => {
         const deed_id = await this.getUserDeedId(client, user_id, category);
         const parent_deed_item_id = payload.parent_deed_item_id ?? null;
         if (parent_deed_item_id !== null) {
           await this.assertParentBelongsToDeed(client, parent_deed_item_id, deed_id);
         }
-        return this.insertDeedItemTree(client, deed_id, parent_deed_item_id, payload);
+        await this.insertDeedItemTree(client, deed_id, parent_deed_item_id, payload);
+      });
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async reorderDeedItems(category: string, payload: ReorderDeedItemsDto, req: AuthenticatedRequest): Promise<void> {
+    try {
+      this.loggerService.log('reorderDeedItems {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      if (!(category === 'hasanaat' || category === 'saiyyiaat')) {
+        this.loggerService.error('Invalid deed category', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Invalid deed category', HttpStatus.BAD_REQUEST);
+      }
+      const { display_order: ids } = payload;
+      if (new Set(ids).size !== ids.length) {
+        this.loggerService.error('Duplicate deed item ids in display_order', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Duplicate deed item ids in display_order', HttpStatus.BAD_REQUEST);
+      }
+      return await this.postgresService.transaction(async (client) => {
+        const deed_id = await this.getUserDeedId(client, user_id, category);
+        const rows = await client.query<DeedItemQueryInterface>(`
+          SELECT deed_item_id
+          FROM deed_items
+          WHERE deed_id = $1
+            AND parent_deed_item_id IS NULL
+            AND deed_item_id = ANY($2::bigint[])
+        `, [deed_id, ids]);
+        if (rows.length !== ids.length) {
+          this.loggerService.error('One or more level-1 deed items not found', HttpStatus.NOT_FOUND);
+          throw new HttpException('One or more level-1 deed items not found', HttpStatus.NOT_FOUND);
+        }
+        await client.query(`
+          UPDATE deed_items di
+          SET display_order = ordering.idx - 1
+          FROM unnest($2::bigint[]) WITH ORDINALITY AS ordering(deed_item_id, idx)
+          WHERE di.deed_item_id = ordering.deed_item_id
+            AND di.deed_id = $1
+            AND di.parent_deed_item_id IS NULL
+        `, [deed_id, ids]);
       });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
