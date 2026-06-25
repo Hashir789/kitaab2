@@ -203,9 +203,6 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
 
   it('-> 400, not 500, when nested children include parent_deed_item_id', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
-    postgresQueryMock
-      .mockResolvedValueOnce([{ deed_id: 5 }])
-      .mockResolvedValueOnce([createdDeedItem]);
 
     const response = await request(app.getHttpServer())
       .post('/deeds/hasanaat/items')
@@ -222,7 +219,7 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
       .expect(400);
 
     expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
+    expect(postgresTransactionMock).not.toHaveBeenCalled();
   });
 
   it('-> 204 creates a deed item on happy path', async () => {
@@ -239,5 +236,61 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
 
     expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('-> 204 creates nested deed items on happy path', async () => {
+    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
+    postgresQueryMock
+      .mockResolvedValueOnce([{ deed_id: 5 }])
+      .mockResolvedValueOnce([]);
+
+    await request(app.getHttpServer())
+      .post('/deeds/hasanaat/items')
+      .set('Authorization', 'Bearer access-token')
+      .send({
+        name: 'Example Deed',
+        display_order: 21,
+        hide_type: 'none',
+        children: [
+          {
+            name: 'Fajar',
+            display_order: 1,
+            children: [
+              {
+                name: 'Farz',
+                display_order: 1,
+              },
+            ],
+          },
+        ],
+      })
+      .expect(204);
+
+    expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
+    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+
+    const [, bulkInsertParams] = postgresQueryMock.mock.calls[1];
+    expect(bulkInsertParams).toEqual(
+      expect.arrayContaining([
+        5,
+        null,
+        'Example Deed',
+        null,
+        21,
+        'none',
+        [0],
+        ['Fajar'],
+        [null],
+        [1],
+        ['none'],
+        [1],
+        [0],
+        ['Farz'],
+        [null],
+        [1],
+        ['none'],
+        [2],
+      ]),
+    );
   });
 });

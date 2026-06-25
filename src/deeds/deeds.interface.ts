@@ -20,3 +20,12 @@ export interface DeedItemResult {
   children?: DeedItemResult[];
   parent_deed_item_id: number | null;
 }
+
+export interface FlatDeedItemNode {
+  name: string;
+  index: number;
+  hide_type: HideType;
+  display_order: number;
+  description: string | null;
+  parent_index: number | null;
+}
