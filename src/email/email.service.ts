@@ -135,7 +135,8 @@ export class EmailService {
 
   async sendDailyReportEmail(body: SendDailyReportEmailBody): Promise<void> {
     this.loggerService.log('sendDailyReportEmail {helper}');
-    const { email, date, visitors, users, conversion } = body;
+    const { email, date, visitors, users, deeds, conversion } = body;
+    const { new_deeds, hasanaat, saiyyiaat } = deeds;
     const { new_users, returning_users, total_users, male, female, age } = users;
     const { new_visitors, returning_visitors, total_visitors, clicks, navigations, visitor_emails, visitor_messages, timezones, device_types } = visitors;
     const template_path = join(process.cwd(), 'src', 'templates', 'daily-report.html');
@@ -168,6 +169,9 @@ export class EmailService {
       .replaceAll('{{male}}', number(male))
       .replaceAll('{{female}}', number(female))
       .replaceAll('{{ageRows}}', buildRows(age, 'No age data'))
+      .replaceAll('{{newDeeds}}', number(new_deeds))
+      .replaceAll('{{deedHasanaat}}', number(hasanaat))
+      .replaceAll('{{deedSaiyyiaat}}', number(saiyyiaat))
       .replaceAll('{{conversion}}', number(conversion));
     const formattedDate = new Date(date).toLocaleDateString('en-GB');
     await this.sendEmail(

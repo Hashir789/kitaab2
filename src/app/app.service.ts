@@ -60,7 +60,7 @@ export class AppService {
   async dailyReport(): Promise<void> {
     try {
       this.loggerService.log('dailyReport {controller}');
-      const [ new_users, returning_users, new_visitors, returning_visitors, clicks, navigations, visitor_emails, visitor_messages, gender, age, timezones, device_types ] = await Promise.all([
+      const [ new_users, returning_users, new_visitors, returning_visitors, clicks, navigations, visitor_emails, visitor_messages, new_deeds, gender, age, timezones, device_types, deed_categories ] = await Promise.all([
         this.readCounter('report:new_users'),
         this.readCounter('report:returning_users'),
         this.readCounter('report:new_visitors'),
@@ -69,10 +69,12 @@ export class AppService {
         this.readCounter('report:navigations'),
         this.readCounter('report:emails'),
         this.readCounter('report:messages'),
+        this.readCounter('report:new_deeds'),
         this.redisService.getHash('report:gender'),
         this.redisService.getHash('report:ages'),
         this.redisService.getHash('report:timezones'),
-        this.redisService.getHash('report:device_types')
+        this.redisService.getHash('report:device_types'),
+        this.redisService.getHash('report:deed_categories')
       ]);
       const total_users = new_users + returning_users;
       const total_visitors = new_visitors + returning_visitors;
@@ -96,9 +98,14 @@ export class AppService {
           female: gender.female ?? 0,
           age
         },
+        deeds: {
+          new_deeds: new_deeds ?? 0,
+          hasanaat: deed_categories.hasanaat ?? 0,
+          saiyyiaat: deed_categories.saiyyiaat ?? 0
+        },
         conversion: new_visitors > 0 ? Math.round((new_users / new_visitors) * 100) : 0
       };
-      const { visitors, users, conversion } = report;
+      const { visitors, users, conversion, deeds } = report;
       await this.emailService.sendDailyReportEmail({
         email: this.configService.get<string>('DAILY_REPORT_RECIPIENT') ?? '',
         date: new Intl.DateTimeFormat('en-GB', { day: '2-digit', month: 'long', year: 'numeric' }).format(new Date()),
@@ -109,6 +116,7 @@ export class AppService {
             Object.entries(report.users.age).map(([years, count]) => [`${years} years`, count])
           )
         },
+        deeds,
         conversion
       });
       await Promise.all(this.reportKeys.map((key) => this.redisService.del(key)));

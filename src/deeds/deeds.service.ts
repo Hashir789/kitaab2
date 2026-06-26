@@ -1,4 +1,5 @@
 import { Logger } from '../logger/logger.service';
+import { RedisService } from '../database/redis/redis.service';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
@@ -11,6 +12,7 @@ export class DeedsService {
 
   constructor(
     private readonly loggerService: Logger,
+    private readonly redisService: RedisService,
     private readonly postgresService: PostgresService
   ) {}
 
@@ -43,6 +45,10 @@ export class DeedsService {
           }
         }
         await this.bulkInsertDeedItemTree(client, deed_id, parent_deed_item_id, flat);
+        this.redisService.incrementBy('report:new_deeds', 1)
+          .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+        this.redisService.incrementInHash('report:deed_categories', category, 1)
+          .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));  
       });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

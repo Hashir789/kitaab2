@@ -49,5 +49,10 @@ export interface SendDailyReportEmailBody {
     returning_users: number;
     age: Record<string, number>;
   };
+  deeds: {
+    new_deeds: number;
+    hasanaat: number;
+    saiyyiaat: number;
+  };
   conversion: number;
 }

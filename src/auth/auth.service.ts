@@ -89,14 +89,14 @@ export class AuthService {
       const pepper = this.configService.get<string>('PASSWORD_PEPPER');
       const email_hmac = this.encryptionService.hmacEmail(mail);
       const rows = await this.postgresService.query<loginQueryInterface>(`
-        SELECT id, password_hash, two_factor_enabled, email_verified
+        SELECT id, password_hash, two_factor_enabled, email_verified, gender, dob
         FROM users WHERE email = $1
       `, [email_hmac]);
       if (!rows?.length) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
         throw new HttpException('Invalid email or password', HttpStatus.UNAUTHORIZED);
       }
-      const { id, password_hash, two_factor_enabled, email_verified } = rows[0];
+      const { id, password_hash, two_factor_enabled, email_verified, gender, dob } = rows[0];
       const hash_password = await compare(password + pepper, password_hash);
       if (!hash_password) {
         this.loggerService.error('Invalid email or password', HttpStatus.UNAUTHORIZED);
@@ -112,12 +112,16 @@ export class AuthService {
         FROM visitors v
         WHERE u.id = $1 AND v.anonymous_id = $2
       `, [id, anonymous_id]);
-      this.redisService.incrementBy('report:returning_users', 1)
-        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
       if (two_factor_enabled) {
         return { two_factor_enabled };
       }
       const access_token = await this.jwtService.signAsync({ sub: id, email: mail, type: 'access', email_verified: true });
+      this.redisService.incrementBy('report:returning_users', 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+      this.redisService.incrementInHash('report:gender', gender, 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
+        this.redisService.incrementInHash('report:ages', JSON.stringify(this.calculateAge(dob)), 1)
+        .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
       return { two_factor_enabled, access_token };
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

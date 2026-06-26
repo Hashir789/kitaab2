@@ -43,9 +43,11 @@ export interface loginResult {
 }
 
 export interface loginQueryInterface {
+  dob: Date;
   id: number;
   password_hash: string;
   email_verified: boolean;
+  gender: 'male' | 'female';
   two_factor_enabled: boolean;
 }
 
