@@ -1,10 +1,10 @@
 import { Logger } from '../logger/logger.service';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
-import { CreateDeedItemDto, ReorderDeedItemsDto } from './deeds.dto';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { TransactionClient } from '../database/postgres/postgres.interface';
-import { DeedCategoryType, DeedItemQueryInterface, DeedItemResult, DeedQueryInterface, HideType, FlatDeedItemNode } from './deeds.interface';
+import { CreateDeedItemDto, ReorderDeedItemsDto, UpdateDeedItemDto } from './deeds.dto';
+import { DeedCategoryType, DeedItemQueryInterface, DeedItemResult, DeedQueryInterface, FlatDeedItemNode } from './deeds.interface';
 
 @Injectable()
 export class DeedsService {
@@ -164,6 +164,60 @@ export class DeedsService {
         parent.children.push(item);
       }
       return roots;
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async updateDeedItem(category: string, deed_item_id: number, payload: UpdateDeedItemDto, req: AuthenticatedRequest): Promise<void> {
+    try {
+      this.loggerService.log('updateDeedItem {controller}');
+      const { name, description, hide_type } = payload;
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      if (!(category === 'hasanaat' || category === 'saiyyiaat')) {
+        this.loggerService.error('Invalid deed category', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Invalid deed category', HttpStatus.BAD_REQUEST);
+      }
+      if (!name && !description && !hide_type) {
+        this.loggerService.error('Nothing to update', HttpStatus.BAD_REQUEST);
+        throw new HttpException('Nothing to update', HttpStatus.BAD_REQUEST);
+      }
+      await this.postgresService.transaction(async (client) => {
+        const deed_id = await this.getUserDeedId(client, user_id, category as DeedCategoryType);
+        const updates: string[] = [];
+        const params: any[] = [];
+        let index = 1;
+        if (name) {
+          updates.push(`name = $${index++}`);
+          params.push(name);
+        }
+        if (description) {
+          updates.push(`description = $${index++}`);
+          params.push(description);
+        }
+        if (hide_type) {
+          updates.push(`hide_type = $${index++}`);
+          params.push(hide_type);
+        }
+        params.push(deed_item_id);
+        params.push(deed_id);
+        const rows = await client.query<{ deed_item_id: number }>(`
+          UPDATE deed_items
+          SET ${updates.join(', ')}
+          WHERE deed_item_id = $${index++}
+            AND deed_id = $${index}
+          RETURNING deed_item_id
+        `, params);
+        if (!rows.length) {
+          this.loggerService.error('Deed item not found', HttpStatus.NOT_FOUND);
+          throw new HttpException('Deed item not found', HttpStatus.NOT_FOUND);
+        }
+      });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

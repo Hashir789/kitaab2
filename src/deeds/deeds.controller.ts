@@ -1,7 +1,7 @@
 import { DeedsService } from './deeds.service';
-import { CreateDeedItemDto, ReorderDeedItemsDto } from './deeds.dto';
 import { DeedItemResult } from './deeds.interface';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
+import { CreateDeedItemDto, ReorderDeedItemsDto, UpdateDeedItemDto } from './deeds.dto';
 import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, Req } from '@nestjs/common';
 
 @Controller('deeds')
@@ -30,5 +30,11 @@ export class DeedsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async deleteDeedItem(@Param('category') category: string, @Param('deed_item_id', ParseIntPipe) deed_item_id: number, @Req() req: AuthenticatedRequest): Promise<void> {
     await this.deedsService.deleteDeedItem(category, deed_item_id, req);
+  }
+
+  @Patch(':category/items/:deed_item_id')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  async updateDeedItemCategory(@Param('category') category: string, @Param('deed_item_id', ParseIntPipe) deed_item_id: number, @Body() body: UpdateDeedItemDto, @Req() req: AuthenticatedRequest): Promise<void> {
+    await this.deedsService.updateDeedItem(category, deed_item_id, body, req);
   }
 }

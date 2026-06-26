@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import type { HideType } from './deeds.interface';
-import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, IsEnum, ValidateNested } from 'class-validator';
 
 export class CreateDeedItemDto {
   @Min(1)
@@ -48,4 +48,18 @@ export class ReorderDeedItemsDto {
   @IsInt({ each: true })
   @Min(1, { each: true })
   display_order: number[];
+}
+
+export class UpdateDeedItemDto {
+  @IsOptional()
+  @IsString()
+  name?: string;
+
+  @IsOptional()
+  @IsString()
+  description?: string;
+
+  @IsOptional()
+  @IsEnum(['none', 'hide_from_all', 'hide_from_graphs'])
+  hide_type?: HideType;
 }
