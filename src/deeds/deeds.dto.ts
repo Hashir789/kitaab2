@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
 import type { HideType } from './deeds.interface';
-import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max, ValidateNested } from 'class-validator';
 
 export class CreateDeedItemDto {
   @Min(1)
@@ -36,6 +36,12 @@ export class CreateDeedItemDto {
 }
 
 export class ReorderDeedItemsDto {
+  @Min(1)
+  @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  parent_deed_item_id?: number;
+
   @IsArray()
   @ArrayMinSize(1)
   @Type(() => Number)

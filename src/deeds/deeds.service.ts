@@ -62,7 +62,7 @@ export class DeedsService {
         this.loggerService.error('Invalid deed category', HttpStatus.BAD_REQUEST);
         throw new HttpException('Invalid deed category', HttpStatus.BAD_REQUEST);
       }
-      const { display_order: ids } = payload;
+      const { display_order: ids, parent_deed_item_id } = payload;
       if (new Set(ids).size !== ids.length) {
         this.loggerService.error('Duplicate deed item ids in display_order', HttpStatus.BAD_REQUEST);
         throw new HttpException('Duplicate deed item ids in display_order', HttpStatus.BAD_REQUEST);
@@ -73,9 +73,9 @@ export class DeedsService {
           SELECT deed_item_id
           FROM deed_items
           WHERE deed_id = $1
-            AND parent_deed_item_id IS NULL
+            AND parent_deed_item_id IS NOT DISTINCT FROM $3
             AND deed_item_id = ANY($2::bigint[])
-        `, [deed_id, ids]);
+        `, [deed_id, ids, parent_deed_item_id]);
         if (rows.length !== ids.length) {
           this.loggerService.error('One or more level-1 deed items not found', HttpStatus.NOT_FOUND);
           throw new HttpException('One or more level-1 deed items not found', HttpStatus.NOT_FOUND);
@@ -86,8 +86,8 @@ export class DeedsService {
           FROM unnest($2::bigint[]) WITH ORDINALITY AS ordering(deed_item_id, idx)
           WHERE di.deed_item_id = ordering.deed_item_id
             AND di.deed_id = $1
-            AND di.parent_deed_item_id IS NULL
-        `, [deed_id, ids]);
+            AND di.parent_deed_item_id IS NOT DISTINCT FROM $3
+        `, [deed_id, ids, parent_deed_item_id]);
       });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
