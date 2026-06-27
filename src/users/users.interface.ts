@@ -25,21 +25,21 @@ export interface MeQueryInterface {
 }
 
 export interface UserTableRow {
-  id: number;
-  visitor_id: number;
-  gender: string;
   dob: Date;
+  id: number;
+  gender: string;
+  created_at: Date;
+  visitor_id: number;
+  last_login_at: Date;
   email_verified: boolean;
   two_factor_enabled: boolean;
-  last_login_at: Date;
-  created_at: Date;
 };
 
 export interface UserTableResponse {
-  rows: UserTableRow[];
-  total: number;
   page: number;
   limit: number;
+  total: number;
+  rows: UserTableRow[];
 };
 
 export interface GenderRatioResponse {
@@ -54,13 +54,13 @@ export interface AgeDistributionResponse {
 
 export interface VisitorAssociationRow {
   id: number;
-  anonymous_id: string;
-  timezone: string;
-  device_type: 'desktop' | 'tablet' | 'mobile';
   clicks: number;
-  navigations: number;
-  number_of_visits: number;
+  timezone: string;
   last_visited: Date;
+  navigations: number;
+  anonymous_id: string;
+  number_of_visits: number;
+  device_type: 'desktop' | 'tablet' | 'mobile';
 };
 
 export interface VisitorsAssociationResponse {

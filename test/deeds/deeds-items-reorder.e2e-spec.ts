@@ -194,5 +194,10 @@ describe('DeedsController (e2e) - PATCH /deeds/:category/items/display-order', (
 
     expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
     expect(postgresQueryMock).toHaveBeenCalledTimes(3);
+    expect(postgresQueryMock.mock.calls[2][0]).toMatch(
+      /SET display_order = array_position\(\$2::bigint\[\], di\.deed_item_id\)/,
+    );
+    expect(postgresQueryMock.mock.calls[2][0]).not.toMatch(/array_position.*- 1/);
+    expect(postgresQueryMock.mock.calls[2][1]).toEqual([5, [23, 13], undefined]);
   });
 });

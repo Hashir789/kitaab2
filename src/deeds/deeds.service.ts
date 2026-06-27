@@ -4,8 +4,9 @@ import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
 import { TransactionClient } from '../database/postgres/postgres.interface';
-import { CreateDeedItemDto, ReorderDeedItemsDto, UpdateDeedItemDto } from './deeds.dto';
-import { DeedCategoryType, DeedItemQueryInterface, DeedItemResult, DeedQueryInterface, FlatDeedItemNode } from './deeds.interface';
+import { UserTableRow, VisitorAssociationRow } from '../users/users.interface';
+import { CreateDeedItemDto, DeedAnalyticsDto, ReorderDeedItemsDto, UpdateDeedItemDto } from './deeds.dto';
+import { DeedCategoryType, DeedItemQueryInterface, DeedItemResult, DeedQueryInterface, DeedRatioResponse, DeedTableResponse, DeedTableRow, FlatDeedItemNode, ParentDeedAssociationResponse, UsersAssociationResponse, VisitorsAssociationResponse } from './deeds.interface';
 
 @Injectable()
 export class DeedsService {
@@ -88,11 +89,10 @@ export class DeedsService {
         }
         await client.query(`
           UPDATE deed_items di
-          SET display_order = ordering.idx - 1
-          FROM unnest($2::bigint[]) WITH ORDINALITY AS ordering(deed_item_id, idx)
-          WHERE di.deed_item_id = ordering.deed_item_id
-            AND di.deed_id = $1
+          SET display_order = array_position($2::bigint[], di.deed_item_id)
+          WHERE di.deed_id = $1
             AND di.parent_deed_item_id IS NOT DISTINCT FROM $3
+            AND di.deed_item_id = ANY($2::bigint[])
         `, [deed_id, ids, parent_deed_item_id]);
       });
     } catch (error) {
@@ -224,6 +224,94 @@ export class DeedsService {
           throw new HttpException('Deed item not found', HttpStatus.NOT_FOUND);
         }
       });
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async deedAnalytics(query: DeedAnalyticsDto): Promise<DeedTableResponse | DeedRatioResponse | UsersAssociationResponse | VisitorsAssociationResponse | ParentDeedAssociationResponse> {
+    try {
+      this.loggerService.log('deedAnalytics {controller}');
+      const { type, id, page = 1, limit = 20 } = query;
+      if (type === 'deeds_table') {
+        const offset = (page - 1) * limit;
+        const [rows, [totals]] = await Promise.all([
+          this.postgresService.query<DeedTableRow>(`
+            SELECT deed_item_id, deed_id, parent_deed_item_id, display_order, hide_type, created_at
+            FROM deed_items
+            ORDER BY created_at DESC, deed_item_id DESC
+            LIMIT $1 OFFSET $2;
+          `, [limit, offset]),
+          this.postgresService.query<{ total: number }>(`
+            SELECT COUNT(*)::int AS total FROM deed_items;
+          `)
+        ]);
+        return { rows, total: Number(totals?.total ?? 0), page, limit };
+      }
+      if (type === 'category') {
+        const rows = await this.postgresService.query<{ category_type: string; count: number }>(`
+          SELECT
+          category_type,
+          COUNT(*)::int AS count
+            FROM deeds
+            GROUP BY category_type
+            ORDER BY count DESC, category_type ASC;
+        `);
+        const total = rows.reduce((sum, row) => sum + Number(row.count), 0);
+        return {
+          total,
+          distribution: rows.map((row) => ({
+            category_type: row.category_type,
+            count: Number(row.count),
+            percentage: total === 0 ? 0 : Number(((Number(row.count) / total) * 100).toFixed(2))
+          }))
+        };
+      }
+      if (type === 'users_association') {
+        if (!id) {
+          this.loggerService.error('id is required for users_association', HttpStatus.BAD_REQUEST);
+          throw new HttpException('id is required for users_association', HttpStatus.BAD_REQUEST);
+        }
+        const rows = await this.postgresService.query<UserTableRow>(`
+          SELECT u.id, u.visitor_id, u.gender, u.dob, u.email_verified, u.two_factor_enabled, u.last_login_at, u.created_at
+          FROM users u
+          JOIN deeds d ON d.user_id = u.id
+          JOIN deed_items di ON di.deed_id = d.deed_id
+          WHERE di.deed_item_id = $1;
+        `, [id]);
+        return { id: Number(id), details: rows };
+      }
+      if (type === 'visitors_association') {
+        if (!id) {
+          this.loggerService.error('id is required for visitors_association', HttpStatus.BAD_REQUEST);
+          throw new HttpException('id is required for visitors_association', HttpStatus.BAD_REQUEST);
+        }
+        const rows = await this.postgresService.query<VisitorAssociationRow>(`
+          SELECT v.id, v.anonymous_id, v.timezone, v.device_type, v.clicks, v.navigations, v.number_of_visits, v.last_visited
+          FROM visitors v
+          JOIN users u ON u.visitor_id = v.id
+          JOIN deeds d ON d.user_id = u.id
+          JOIN deed_items di ON di.deed_id = d.deed_id
+          WHERE di.deed_item_id = $1;
+        `, [id]);
+        return { id: Number(id), details: rows };
+      }
+      if (type === 'parent_deed_association') {
+        if (!id) {
+          this.loggerService.error('id is required for parent_deed_association', HttpStatus.BAD_REQUEST);
+          throw new HttpException('id is required for parent_deed_association', HttpStatus.BAD_REQUEST);
+        }
+        const rows = await this.postgresService.query<DeedTableRow>(`
+          SELECT parent.deed_item_id, parent.deed_id, parent.parent_deed_item_id, parent.display_order, parent.hide_type, parent.created_at
+          FROM deed_items child
+          JOIN deed_items parent ON parent.deed_item_id = child.parent_deed_item_id
+          WHERE child.deed_item_id = $1;
+        `, [id]);
+        return { id: Number(id), details: rows };
+      }
+      this.loggerService.error('Invalid deed analytics type', HttpStatus.BAD_REQUEST);
+      throw new HttpException('Invalid deed analytics type', HttpStatus.BAD_REQUEST);
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);

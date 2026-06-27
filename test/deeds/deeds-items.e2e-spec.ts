@@ -77,6 +77,8 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
+        incrementInHash: jest.fn(async () => 1),
+        incrementBy: jest.fn(async () => undefined)
       })
       .overrideProvider(JwtService)
       .useValue({
