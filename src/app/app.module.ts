@@ -5,6 +5,7 @@ import { AuthModule } from '../auth/auth.module';
 import { EmailModule } from '../email/email.module';
 import { UsersModule } from '../users/users.module';
 import { DeedsModule } from '../deeds/deeds.module';
+import { ScalesModule } from '../scales/scales.module';
 import { LoggerModule } from '../logger/logger.module';
 import { RedisModule } from '../database/redis/redis.module';
 import { VisitorsModule } from '../visitors/visitors.module';
@@ -21,6 +22,7 @@ import { PostgresModule } from '../database/postgres/postgres.module';
     RedisModule,
     UsersModule,
     DeedsModule,
+    ScalesModule,
     LoggerModule,
     PostgresModule,
     VisitorsModule
