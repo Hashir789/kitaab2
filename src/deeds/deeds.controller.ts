@@ -1,13 +1,19 @@
 import { DeedsService } from './deeds.service';
 import { DeedItemResult } from './deeds.interface';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
-import { CreateDeedItemDto, ReorderDeedItemsDto, UpdateDeedItemDto } from './deeds.dto';
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, Req } from '@nestjs/common';
+import { CreateDeedItemDto, DeedAnalyticsDto, ReorderDeedItemsDto, UpdateDeedItemDto } from './deeds.dto';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, ParseIntPipe, Patch, Post, Query, Req } from '@nestjs/common';
 
 @Controller('deeds')
 export class DeedsController {
 
   constructor(private readonly deedsService: DeedsService) {}
+
+  @Get('analytics')
+  @HttpCode(HttpStatus.OK)
+  deedAnalytics(@Query() query: DeedAnalyticsDto) {
+    return this.deedsService.deedAnalytics(query);
+  }
 
   @Post(':category/items')
   @HttpCode(HttpStatus.NO_CONTENT)

@@ -28,7 +28,8 @@ async function bootstrap(): Promise<void> {
       'http://localhost:3000',
       'https://www.kitaab.me',
       'https://staging.kitaab.me',
-      'https://backoffice.kitaab.me'
+      'https://backoffice.kitaab.me',
+      'https://kitaab-1-phi.vercel.app'
     ],
     credentials: true,
     methods: ['GET', 'POST', 'PATCH', 'DELETE'],

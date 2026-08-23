@@ -10,22 +10,15 @@ import { INestApplication, ValidationPipe } from '@nestjs/common';
 import { RedisService } from '../../src/database/redis/redis.service';
 import { EncryptionService } from '../../src/encryption/encryption.service';
 import { PostgresService } from '../../src/database/postgres/postgres.service';
-import { TransactionClient } from '../../src/database/postgres/postgres.interface';
 
-describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
+describe('ScalesController (e2e) - GET /scales/:deed_item_id/items', () => {
   let app: INestApplication<App>;
 
   const postgresQueryMock = jest.fn();
-  const postgresTransactionMock = jest.fn();
   const jwtVerifyAsyncMock = jest.fn();
   const configGetMock = jest.fn();
 
-  const validPayload = {
-    name: 'Daily prayer',
-    description: 'Track daily prayer',
-    display_order: 1,
-    hide_type: 'none',
-  };
+  const deedItemId = 10;
 
   const accessTokenPayload = {
     sub: 1,
@@ -34,20 +27,8 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
     email_verified: true,
   };
 
-  const createdDeedItem = {
-    deed_item_id: 10,
-    deed_id: 5,
-    parent_deed_item_id: null,
-    name: validPayload.name,
-    description: validPayload.description,
-    display_order: validPayload.display_order,
-    hide_type: validPayload.hide_type,
-    created_at: new Date('2026-01-01T00:00:00.000Z'),
-  };
-
   beforeEach(async () => {
     postgresQueryMock.mockReset();
-    postgresTransactionMock.mockReset();
     jwtVerifyAsyncMock.mockReset();
     configGetMock.mockReset();
 
@@ -58,17 +39,13 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
       return table[key];
     });
 
-    postgresTransactionMock.mockImplementation(async (callback: (client: TransactionClient) => Promise<unknown>) =>
-      callback({ query: postgresQueryMock }),
-    );
-
     const moduleFixture: TestingModule = await Test.createTestingModule({
       imports: [AppModule],
     })
       .overrideProvider(PostgresService)
       .useValue({
         query: postgresQueryMock,
-        transaction: postgresTransactionMock,
+        transaction: jest.fn(),
         ping: jest.fn(),
       })
       .overrideProvider(RedisService)
@@ -77,8 +54,6 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
-        incrementInHash: jest.fn(async () => 1),
-        incrementBy: jest.fn(async () => undefined)
       })
       .overrideProvider(JwtService)
       .useValue({
@@ -119,180 +94,155 @@ describe('DeedsController (e2e) - POST /deeds/:category/items', () => {
 
   it('-> 401, not 500, when Authorization header missing', async () => {
     const response = await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
-      .send(validPayload)
+      .get(`/scales/${deedItemId}/items`)
       .expect(401);
 
     expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).not.toHaveBeenCalled();
+    expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
   it('-> 401, not 500, when token invalid', async () => {
     jwtVerifyAsyncMock.mockRejectedValueOnce(new Error('jwt malformed'));
 
     const response = await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
+      .get(`/scales/${deedItemId}/items`)
       .set('Authorization', 'Bearer bad-token')
-      .send(validPayload)
       .expect(401);
 
     expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).not.toHaveBeenCalled();
+    expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
-  it('-> 400, not 500, when payload invalid', async () => {
+  it('-> 401, not 500, when token type is not access', async () => {
+    jwtVerifyAsyncMock.mockResolvedValueOnce({
+      ...accessTokenPayload,
+      type: 'refresh',
+    });
+
+    const response = await request(app.getHttpServer())
+      .get(`/scales/${deedItemId}/items`)
+      .set('Authorization', 'Bearer refresh-token')
+      .expect(401);
+
+    expect(response.status).not.toBe(500);
+    expect(postgresQueryMock).not.toHaveBeenCalled();
+  });
+
+  it('-> 400, not 500, when deed_item_id is not numeric', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
 
     const response = await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
+      .get('/scales/not-a-number/items')
       .set('Authorization', 'Bearer access-token')
-      .send({
-        name: '',
-        display_order: -1,
-        hide_type: 'invalid',
-      })
       .expect(400);
 
     expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).not.toHaveBeenCalled();
+    expect(postgresQueryMock).not.toHaveBeenCalled();
   });
 
-  it('-> 400, not 500, when category invalid', async () => {
-    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
-
-    const response = await request(app.getHttpServer())
-      .post('/deeds/invalid/items')
-      .set('Authorization', 'Bearer access-token')
-      .send(validPayload)
-      .expect(400);
-
-    expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).not.toHaveBeenCalled();
-  });
-
-  it('-> 404, not 500, when deed category not found', async () => {
-    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
-    postgresQueryMock.mockResolvedValueOnce([]);
-
-    const response = await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
-      .set('Authorization', 'Bearer access-token')
-      .send(validPayload)
-      .expect(404);
-
-    expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('-> 404, not 500, when parent deed item not found', async () => {
+  it('-> 404, not 500, when root deed item not found', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
     postgresQueryMock
-      .mockResolvedValueOnce([{ deed_id: 5 }])
+      .mockResolvedValueOnce([])
       .mockResolvedValueOnce([]);
 
     const response = await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
+      .get(`/scales/${deedItemId}/items`)
       .set('Authorization', 'Bearer access-token')
-      .send({
-        ...validPayload,
-        parent_deed_item_id: 999,
-      })
       .expect(404);
 
     expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
-  });
-
-  it('-> 400, not 500, when nested children include parent_deed_item_id', async () => {
-    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
-
-    const response = await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
-      .set('Authorization', 'Bearer access-token')
-      .send({
-        ...validPayload,
-        children: [
-          {
-            name: 'Nested child',
-            parent_deed_item_id: 10,
-          },
-        ],
-      })
-      .expect(400);
-
-    expect(response.status).not.toBe(500);
-    expect(postgresTransactionMock).not.toHaveBeenCalled();
-  });
-
-  it('-> 204 creates a deed item on happy path', async () => {
-    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
-    postgresQueryMock
-      .mockResolvedValueOnce([{ deed_id: 5 }])
-      .mockResolvedValueOnce([createdDeedItem]);
-
-    await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
-      .set('Authorization', 'Bearer access-token')
-      .send(validPayload)
-      .expect(204);
-
-    expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
   });
 
-  it('-> 204 creates nested deed items on happy path', async () => {
+  it('-> 400, not 500, when deed item is not a root item', async () => {
     jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
     postgresQueryMock
-      .mockResolvedValueOnce([{ deed_id: 5 }])
+      .mockResolvedValueOnce([])
+      .mockResolvedValueOnce([{ deed_item_id: deedItemId }]);
+
+    const response = await request(app.getHttpServer())
+      .get(`/scales/${deedItemId}/items`)
+      .set('Authorization', 'Bearer access-token')
+      .expect(400);
+
+    expect(response.status).not.toBe(500);
+    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+  });
+
+  it('-> 200 returns an empty array when scale has no items', async () => {
+    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
+    postgresQueryMock
+      .mockResolvedValueOnce([{ deed_item_id: deedItemId }])
       .mockResolvedValueOnce([]);
 
     await request(app.getHttpServer())
-      .post('/deeds/hasanaat/items')
+      .get(`/scales/${deedItemId}/items`)
       .set('Authorization', 'Bearer access-token')
-      .send({
-        name: 'Example Deed',
-        display_order: 21,
-        hide_type: 'none',
-        children: [
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toEqual([]);
+      });
+
+    expect(postgresQueryMock).toHaveBeenCalledTimes(2);
+
+    const [, rootDeedLookupParams] = postgresQueryMock.mock.calls[0];
+    expect(rootDeedLookupParams).toEqual([deedItemId, 1]);
+
+    const [, scaleItemsParams] = postgresQueryMock.mock.calls[1];
+    expect(scaleItemsParams).toEqual([deedItemId]);
+  });
+
+  it('-> 200 returns scale items ordered by display_order', async () => {
+    jwtVerifyAsyncMock.mockResolvedValueOnce(accessTokenPayload);
+
+    const createdAt = new Date('2026-01-01T00:00:00.000Z');
+    postgresQueryMock
+      .mockResolvedValueOnce([{ deed_item_id: deedItemId }])
+      .mockResolvedValueOnce([
+        {
+          scale_items_id: 1,
+          scale_id: 3,
+          name: 'Level 1',
+          description: 'First level',
+          display_order: 0,
+          created_at: createdAt,
+        },
+        {
+          scale_items_id: 2,
+          scale_id: 3,
+          name: 'Level 2',
+          description: null,
+          display_order: 1,
+          created_at: createdAt,
+        },
+      ]);
+
+    await request(app.getHttpServer())
+      .get(`/scales/${deedItemId}/items`)
+      .set('Authorization', 'Bearer access-token')
+      .expect(200)
+      .expect((res) => {
+        expect(res.body).toEqual([
           {
-            name: 'Fajar',
+            scale_items_id: 1,
+            scale_id: 3,
+            name: 'Level 1',
+            description: 'First level',
+            display_order: 0,
+            created_at: createdAt.toISOString(),
+          },
+          {
+            scale_items_id: 2,
+            scale_id: 3,
+            name: 'Level 2',
+            description: null,
             display_order: 1,
-            children: [
-              {
-                name: 'Farz',
-                display_order: 1,
-              },
-            ],
+            created_at: createdAt.toISOString(),
           },
-        ],
-      })
-      .expect(204);
+        ]);
+      });
 
-    expect(postgresTransactionMock).toHaveBeenCalledTimes(1);
     expect(postgresQueryMock).toHaveBeenCalledTimes(2);
-
-    const [, bulkInsertParams] = postgresQueryMock.mock.calls[1];
-    expect(bulkInsertParams).toEqual(
-      expect.arrayContaining([
-        5,
-        null,
-        'Example Deed',
-        null,
-        21,
-        'none',
-        [0],
-        ['Fajar'],
-        [null],
-        [1],
-        ['none'],
-        [1],
-        [0],
-        ['Farz'],
-        [null],
-        [1],
-        ['none'],
-        [2],
-      ]),
-    );
   });
 });

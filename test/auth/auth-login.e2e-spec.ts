@@ -19,10 +19,12 @@ import { compare } from 'bcrypt';
 describe('AuthController (e2e) - POST /auth/login', () => {
   let app: INestApplication<App>;
 
-  const postgresQueryMock = jest.fn();
-  const jwtSignAsyncMock = jest.fn();
   const configGetMock = jest.fn();
   const hmacEmailMock = jest.fn();
+  const jwtSignAsyncMock = jest.fn();
+  const postgresQueryMock = jest.fn();
+  const redisIncrementByMock = jest.fn(async () => undefined);
+  const redisIncrementInHashMock = jest.fn(async () => 1);
 
   const validPayload = {
     email: 'muhammad@example.com',
@@ -35,13 +37,17 @@ describe('AuthController (e2e) - POST /auth/login', () => {
     password_hash: 'stored-hash',
     two_factor_enabled: false,
     email_verified: true,
+    gender: 'male' as const,
+    dob: '1995-05-10',
   };
 
   beforeEach(async () => {
-    postgresQueryMock.mockReset();
-    jwtSignAsyncMock.mockReset();
     configGetMock.mockReset();
     hmacEmailMock.mockReset();
+    jwtSignAsyncMock.mockReset();
+    postgresQueryMock.mockReset();
+    redisIncrementByMock.mockClear();
+    redisIncrementInHashMock.mockClear();
     (compare as unknown as jest.Mock).mockReset();
 
     configGetMock.mockImplementation((key: string) => {
@@ -70,8 +76,8 @@ describe('AuthController (e2e) - POST /auth/login', () => {
         get: jest.fn(),
         del: jest.fn(),
         ping: jest.fn(),
-        incrementBy: jest.fn(async () => undefined),
-        incrementInHash: jest.fn(async () => 1),
+        incrementBy: redisIncrementByMock,
+        incrementInHash: redisIncrementInHashMock,
       })
       .overrideProvider(JwtService)
       .useValue({
@@ -284,6 +290,9 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       type: 'access',
       email_verified: true,
     });
+    expect(redisIncrementByMock).toHaveBeenCalledWith('report:returning_users', 1);
+    expect(redisIncrementInHashMock).toHaveBeenCalledWith('report:gender', userRow.gender, 1);
+    expect(redisIncrementInHashMock).toHaveBeenCalledWith('report:ages', expect.any(String), 1);
   });
 
   it('-> 200 and returns two_factor_enabled when 2FA enabled', async () => {
@@ -303,5 +312,7 @@ describe('AuthController (e2e) - POST /auth/login', () => {
       });
 
     expect(jwtSignAsyncMock).not.toHaveBeenCalled();
+    expect(redisIncrementByMock).not.toHaveBeenCalled();
+    expect(redisIncrementInHashMock).not.toHaveBeenCalled();
   });
 });

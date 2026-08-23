@@ -1,6 +1,6 @@
 import { Type } from 'class-transformer';
-import type { HideType } from './deeds.interface';
-import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, IsEnum, ValidateNested } from 'class-validator';
+import type { DeedAnalyticsType, HideType } from './deeds.interface';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, Max, IsEnum, ValidateNested } from 'class-validator';
 
 export class CreateDeedItemDto {
   @Min(1)
@@ -62,4 +62,29 @@ export class UpdateDeedItemDto {
   @IsOptional()
   @IsEnum(['none', 'hide_from_all', 'hide_from_graphs'])
   hide_type?: HideType;
+}
+
+export class DeedAnalyticsDto {
+  @IsString()
+  @IsIn(['deeds_table', 'category', 'users_association', 'visitors_association', 'parent_deed_association'])
+  type: DeedAnalyticsType;
+
+  @IsInt()
+  @IsNotEmpty()
+  @IsOptional()
+  @Type(() => Number)
+  id?: string;
+
+  @Min(1)
+  @IsInt()
+  @IsOptional()
+  @Type(() => Number)
+  page?: number;
+
+  @Min(1)
+  @IsInt()
+  @Max(100)
+  @IsOptional()
+  @Type(() => Number)
+  limit?: number;
 }
