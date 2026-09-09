@@ -2,8 +2,8 @@ import { Logger } from '../logger/logger.service';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
 import { Injectable, HttpException, HttpStatus } from '@nestjs/common';
 import { PostgresService } from '../database/postgres/postgres.service';
-import { CreateScaleItemsDto, ReorderScaleItemsDto, UpdateScaleItemDto } from './scales.dto';
-import { DeedItemQueryInterface, ScaleItemQueryInterface, ScaleItemResult, ScaleQueryInterface } from './scales.interface';
+import { CreateScaleItemsDto, ReorderScaleItemsDto, SetDeedTypeDto, UpdateScaleItemDto } from './scales.dto';
+import { DeedItemQueryInterface, DeedScaleStatusResult, ScaleItemQueryInterface, ScaleItemResult, ScaleQueryInterface } from './scales.interface';
 
 @Injectable()
 export class ScalesService {
@@ -332,4 +332,124 @@ export class ScalesService {
       throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
     }
   }
-};
+
+  async getDeedScaleStatus(deed_item_id: number, req: AuthenticatedRequest): Promise<DeedScaleStatusResult> {
+    try {
+      this.loggerService.log('getDeedScaleStatus {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      const rows = await this.postgresService.query<{ deed_item_id: number; type: 'scale' | 'count' | null }>(`
+        SELECT di.deed_item_id, di.type
+        FROM deed_items di
+        INNER JOIN deeds d ON d.deed_id = di.deed_id
+        WHERE di.deed_item_id = $1
+          AND di.parent_deed_item_id IS NULL
+          AND d.user_id = $2
+      `, [deed_item_id, user_id]);
+      if (!rows?.length) {
+        const nestedRows = await this.postgresService.query<DeedItemQueryInterface>(`
+          SELECT di.deed_item_id
+          FROM deed_items di
+          INNER JOIN deeds d ON d.deed_id = di.deed_id
+          WHERE di.deed_item_id = $1
+            AND d.user_id = $2
+        `, [deed_item_id, user_id]);
+        if (nestedRows?.length) {
+          this.loggerService.error('Scale can only be assigned to root deed items', HttpStatus.BAD_REQUEST);
+          throw new HttpException('Scale can only be assigned to root deed items', HttpStatus.BAD_REQUEST);
+        }
+        this.loggerService.error('Root deed item not found', HttpStatus.NOT_FOUND);
+        throw new HttpException('Root deed item not found', HttpStatus.NOT_FOUND);
+      }
+      const recordRows = await this.postgresService.query<{ is_locked: boolean }>(`
+        SELECT EXISTS (
+          SELECT 1
+          FROM records r
+          WHERE r.user_id = $1
+            AND (
+              r.deed_item_id = $2
+              OR r.deed_item_id IN (
+                SELECT child.deed_item_id
+                FROM deed_items child
+                WHERE child.parent_deed_item_id = $2
+              )
+            )
+        ) AS is_locked
+      `, [user_id, deed_item_id]);
+      return {
+        type: rows[0].type ?? null,
+        is_locked: Boolean(recordRows[0]?.is_locked),
+      };
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+
+  async setDeedType(deed_item_id: number, payload: SetDeedTypeDto, req: AuthenticatedRequest): Promise<void> {
+    try {
+      this.loggerService.log('setDeedType {controller}');
+      const { sub: user_id, type: token_type } = req.user;
+      if (token_type !== 'access') {
+        this.loggerService.error('Invalid token type', HttpStatus.UNAUTHORIZED);
+        throw new HttpException('Invalid token type', HttpStatus.UNAUTHORIZED);
+      }
+      const { type } = payload;
+      await this.postgresService.transaction(async (client) => {
+        const rows = await client.query<DeedItemQueryInterface>(`
+          SELECT di.deed_item_id
+          FROM deed_items di
+          INNER JOIN deeds d ON d.deed_id = di.deed_id
+          WHERE di.deed_item_id = $1
+            AND di.parent_deed_item_id IS NULL
+            AND d.user_id = $2
+        `, [deed_item_id, user_id]);
+        if (!rows?.length) {
+          const nestedRows = await client.query<DeedItemQueryInterface>(`
+            SELECT di.deed_item_id
+            FROM deed_items di
+            INNER JOIN deeds d ON d.deed_id = di.deed_id
+            WHERE di.deed_item_id = $1
+              AND d.user_id = $2
+          `, [deed_item_id, user_id]);
+          if (nestedRows?.length) {
+            this.loggerService.error('Scale can only be assigned to root deed items', HttpStatus.BAD_REQUEST);
+            throw new HttpException('Scale can only be assigned to root deed items', HttpStatus.BAD_REQUEST);
+          }
+          this.loggerService.error('Root deed item not found', HttpStatus.NOT_FOUND);
+          throw new HttpException('Root deed item not found', HttpStatus.NOT_FOUND);
+        }
+        const recordRows = await client.query<{ is_locked: boolean }>(`
+          SELECT EXISTS (
+            SELECT 1
+            FROM records r
+            WHERE r.user_id = $1
+              AND (
+                r.deed_item_id = $2
+                OR r.deed_item_id IN (
+                  SELECT child.deed_item_id
+                  FROM deed_items child
+                  WHERE child.parent_deed_item_id = $2
+                )
+              )
+          ) AS is_locked
+        `, [user_id, deed_item_id]);
+        if (recordRows[0]?.is_locked) {
+          this.loggerService.error('Cannot change type of deed item with existing records', HttpStatus.BAD_REQUEST);
+          throw new HttpException('Cannot change type of deed item with existing records', HttpStatus.BAD_REQUEST);
+        }
+        await client.query(`
+          UPDATE deed_items
+          SET type = $1
+          WHERE deed_item_id = $2
+        `, [type, deed_item_id]);
+      });
+    } catch (error) {
+      this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+      throw new HttpException(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
+    }
+  }
+}

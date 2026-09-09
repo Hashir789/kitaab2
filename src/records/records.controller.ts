@@ -1,8 +1,8 @@
 import { RecordsService } from './records.service';
-import { RecordResult } from './records.interface';
-import { CreateRecordsDto, DeleteRecordsDto } from './records.dto';
+import { DeedRecordRangeItemResult, RecordResult } from './records.interface';
+import { CreateRecordsDto, DeleteRecordsDto, GetRecordsRangeDto } from './records.dto';
 import type { AuthenticatedRequest } from '../auth/auth.interface';
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Req } from '@nestjs/common';
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query, Req } from '@nestjs/common';
 
 @Controller('records')
 export class RecordsController {
@@ -13,6 +13,11 @@ export class RecordsController {
   @HttpCode(HttpStatus.NO_CONTENT)
   async createRecords(@Body() body: CreateRecordsDto, @Req() req: AuthenticatedRequest): Promise<void> {
     await this.recordsService.createRecords(body, req);
+  }
+
+  @Get('range')
+  async getRecordsRange(@Query() query: GetRecordsRangeDto, @Req() req: AuthenticatedRequest): Promise<DeedRecordRangeItemResult[]> {
+    return this.recordsService.getRecordsRange(query, req);
   }
 
   @Get(':date')

@@ -225,7 +225,6 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
                 display_order: 1,
                 hide_type: 'none',
                 created_at: createdAt.toISOString(),
-                type: null,
                 last_recorded_at: null,
                 children: [
                   {
@@ -237,7 +236,6 @@ describe('DeedsController (e2e) - GET /deeds/:category/items', () => {
                     display_order: 1,
                     hide_type: 'none',
                     created_at: createdAt.toISOString(),
-                    type: null,
                     last_recorded_at: null,
                   },
                 ],

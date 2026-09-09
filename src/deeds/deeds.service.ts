@@ -15,7 +15,7 @@ export class DeedsService {
     private readonly loggerService: Logger,
     private readonly redisService: RedisService,
     private readonly postgresService: PostgresService
-  ) {}
+  ) { }
 
   async createDeedItem(category: string, payload: CreateDeedItemDto, req: AuthenticatedRequest): Promise<void> {
     try {
@@ -49,7 +49,7 @@ export class DeedsService {
         this.redisService.incrementBy('report:new_deeds', 1)
           .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
         this.redisService.incrementInHash('report:deed_categories', category, 1)
-          .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));  
+          .catch((error) => this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR));
       });
     } catch (error) {
       this.loggerService.error(error.message, error.status ?? HttpStatus.INTERNAL_SERVER_ERROR);
@@ -146,16 +146,10 @@ export class DeedsService {
       }
       const deed_id = await this.getUserDeedId(this.postgresService, user_id, category as DeedCategoryType);
       const rows = await this.postgresService.query<DeedItemResult>(`
-        SELECT di.deed_item_id, di.deed_id, di.parent_deed_item_id, di.name, di.description, di.display_order, di.hide_type, di.created_at, lr.last_recorded_at, lr.type
+        SELECT di.deed_item_id, di.deed_id, di.parent_deed_item_id, di.name, di.description, di.display_order, di.hide_type, di.created_at, di.type, lr.last_recorded_at
         FROM deed_items di
         LEFT JOIN LATERAL (
-          SELECT
-            r.created_at AS last_recorded_at,
-            CASE
-              WHEN r.scale_item_id IS NOT NULL THEN 'scale'
-              WHEN r.count_value IS NOT NULL THEN 'count'
-              ELSE NULL
-            END AS type
+          SELECT r.created_at AS last_recorded_at
           FROM records r
           WHERE r.deed_item_id = di.deed_item_id
             AND r.user_id = $2
@@ -164,12 +158,12 @@ export class DeedsService {
         ) lr ON true
         WHERE di.deed_id = $1
         ORDER BY di.display_order ASC, di.deed_item_id ASC
-      `, [deed_id, user_id]);  
+      `, [deed_id, user_id]);
       const itemsById = new Map<number, DeedItemResult>();
       for (const row of rows) {
         itemsById.set(row.deed_item_id, { ...row, children: undefined });
       }
-  
+
       const roots: DeedItemResult[] = [];
 
       for (const item of itemsById.values()) {
@@ -185,34 +179,26 @@ export class DeedsService {
         parent.children ??= [];
         parent.children.push(item);
       }
-      
+
       const populateParentData = (item: DeedItemResult): void => {
         if (!item.children?.length) return;
 
         for (const child of item.children) populateParentData(child);
-          
+
         const latestChild = item.children.filter((child) => child.last_recorded_at).sort((a, b) =>
           new Date(b.last_recorded_at!).getTime() - new Date(a.last_recorded_at!).getTime()
         )[0];
-  
-        item.last_recorded_at = latestChild?.last_recorded_at ?? null;
 
-        const childTypes = new Set(item.children.map((child) => child.type).filter(type => type !== null));
-  
-        if (childTypes.has('scale')) {
-          item.type = 'scale';
-        } else if (childTypes.has('count')) {
-          item.type = 'count';
-        } else {
-          item.type = null;
-        }
+        if (latestChild?.last_recorded_at)
+          if (!item.last_recorded_at || new Date(latestChild.last_recorded_at).getTime() > new Date(item.last_recorded_at).getTime())
+            item.last_recorded_at = latestChild.last_recorded_at;
 
         for (const child of item.children) delete child.type;
       };
-  
+
       for (const root of roots) {
         populateParentData(root);
-  
+
         if (root.children?.length) {
           for (const child of root.children) delete child.type;
         }
@@ -224,7 +210,7 @@ export class DeedsService {
         error.message,
         error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,
       );
-  
+
       throw new HttpException(
         error.message,
         error.status ?? HttpStatus.INTERNAL_SERVER_ERROR,

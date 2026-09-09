@@ -1,5 +1,10 @@
 import { Type } from 'class-transformer';
-import { ArrayMinSize, IsArray, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+import { ArrayMinSize, IsArray, IsIn, IsInt, IsNotEmpty, IsOptional, IsString, Min, ValidateNested } from 'class-validator';
+
+export class SetDeedTypeDto {
+  @IsIn(['scale', 'count'])
+  type: 'scale' | 'count';
+}
 
 export class CreateScaleItemDto {
   @IsString()

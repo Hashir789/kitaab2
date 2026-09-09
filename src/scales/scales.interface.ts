@@ -18,3 +18,13 @@ export interface ScaleItemResult {
   scale_items_id: number;
   description: string | null;
 }
+
+export interface DeedScaleStatusResult {
+  is_locked: boolean;
+  type: 'scale' | 'count' | null;
+}
+
+export interface DeedScaleStatusQueryInterface {
+  is_locked: boolean;
+  type: 'scale' | 'count' | null;
+}
